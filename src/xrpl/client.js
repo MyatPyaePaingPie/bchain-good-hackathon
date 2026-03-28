@@ -95,6 +95,12 @@ export async function sendPayment({ wallet, destination, amount }) {
   });
 
   const signed = senderWallet.sign(prepared);
-  const result = await c.submitAndWait(signed.tx_blob);
+
+  const result = await Promise.race([
+    c.submitAndWait(signed.tx_blob),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Payment timed out after 30s")), 30000)
+    ),
+  ]);
   return result;
 }

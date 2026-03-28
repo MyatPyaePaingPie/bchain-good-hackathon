@@ -40,11 +40,15 @@ export async function createEscrow({
   });
 
   const signed = wallet.sign(prepared);
-  const result = await c.submitAndWait(signed.tx_blob);
 
-  // The escrow sequence is the Sequence from the creating transaction
+  const result = await Promise.race([
+    c.submitAndWait(signed.tx_blob),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("EscrowCreate timed out after 30s")), 30000)
+    ),
+  ]);
+
   const sequence = prepared.Sequence;
-
   return { result, sequence };
 }
 
@@ -85,6 +89,13 @@ export async function finishEscrow({
   });
 
   const signed = signerWallet.sign(prepared);
-  const result = await c.submitAndWait(signed.tx_blob);
+
+  // submitAndWait can hang if tx never validates — add a 30s timeout
+  const result = await Promise.race([
+    c.submitAndWait(signed.tx_blob),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("EscrowFinish timed out after 30s — tx may still be pending on-chain")), 30000)
+    ),
+  ]);
   return result;
 }
