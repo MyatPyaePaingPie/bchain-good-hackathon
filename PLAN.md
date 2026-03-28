@@ -115,19 +115,19 @@ Not just receipt tokens — these NFTs encode verifiable data about what happene
 ```
 src/
   xrpl/
-    client.js               # Paing — WebSocket connection + account queries
-    escrow.js               # Paing — EscrowCreate / EscrowFinish
+    client.js               # Paing — WebSocket connection + account queries (DONE)
+    escrow.js               # Paing — EscrowCreate / EscrowFinish (DONE)
     condition.js            # Angelina — crypto-condition generation (Web Crypto API)
-    nft.js                  # Angelina — NFTokenMint / getAccountNFTs helpers
+    nft.js                  # Angelina — NFTokenMint / getAccountNFTs + proof-of-impact metadata
   components/
-    DonorPanel.jsx          # Tianqi — donate form, NFT receipts, balance
-    SignerPanel.jsx         # Andrew — committee approval, quorum tracker
-    MilestoneBoard.jsx      # Tianqi — milestone cards with status badges
-    FundDashboard.jsx       # Angelina — live balances, escrows, tx history
+    DonorPanel.jsx          # Tianqi — donate form, multi-escrow funding, NFT portfolio
+    SignerPanel.jsx         # Andrew — per-milestone committee approval, quorum tracker
+    MilestoneBoard.jsx      # Andrew — milestone cards, status badges, pipeline view
+    FundDashboard.jsx       # Paing — live balances, escrow list, tx history
   data/
-    milestones.js           # Andrew — hardcoded demo milestones
-    wallets.js              # Paing — testnet wallet configs
-  App.jsx                   # Tianqi — root component, layout, tab navigation
+    milestones.js           # Tianqi — hardcoded demo milestones
+    wallets.js              # Paing — testnet wallet configs (DONE)
+  App.jsx                   # Paing — root component, milestone state management, layout
   app.css                   # shared — Tailwind entry point
   main.jsx
 ```
@@ -138,67 +138,78 @@ src/
 
 ## Work Split (by person, by file — no overlaps)
 
-### Paing — Escrow + Connection Layer
+### Paing — State Management + Dashboard + XRPL Layer
 
-You own `client.js`, `escrow.js`, and `wallets.js`. The core ledger connection and escrow logic.
+You own `client.js` (DONE), `escrow.js` (DONE), `wallets.js` (DONE), `App.jsx`, and `FundDashboard.jsx`.
 
-| Time | Task |
-|---|---|
-| Fri 7-8pm | Generate 4 testnet wallets (faucet), write `wallets.js` and `.env` |
-| Fri 8-10pm | `client.js` — connect to testnet, getBalance, getAccountTx, getAccountEscrows |
-| | `escrow.js` — createEscrow() with crypto-condition, finishEscrow() with fulfillment |
-| Fri 10pm-12am | End-to-end test in console with Angelina: donate -> escrow create -> finish -> NFT mint |
-| | Fix bugs, edge cases (fee calculation, Ripple epoch) |
-| Sat 10am-12pm | Help wire XRPL helpers into everyone's components |
-| Sat 12-2pm | Debug integration issues, polish live data updates |
-| Sat 2-3:30pm | Demo prep, bug fixes |
-
-### Angelina — Crypto-Conditions + NFTs + Dashboard
-
-You own `condition.js`, `nft.js`, and `FundDashboard.jsx`. The cryptography layer, NFT minting, and the transparency dashboard.
+XRPL core is finished. Now you own the app's brain (App.jsx state management) and the transparency dashboard.
 
 | Time | Task |
 |---|---|
-| Fri 7-8pm | Read the Technical Gotchas section — especially crypto-conditions and NFT encoding |
-| Fri 8-10pm | `condition.js` — generateCondition() using Web Crypto API (SHA-256 preimage -> fulfillment -> condition) |
-| | `nft.js` — mintNFT() with hex-encoded URI, getAccountNFTs() |
-| Fri 10pm-12am | Test with Paing end-to-end: generate condition -> create escrow -> finish -> mint NFT |
-| | Start `FundDashboard.jsx` — fund account balance, active escrows list, tx history |
-| Sat 10am-12pm | Finish FundDashboard: testnet explorer links, progress bars, auto-refresh |
-| Sat 12-2pm | Polish dashboard, help with integration |
+| Fri 7-8pm | ~~Generate wallets, write client.js, escrow.js~~ DONE |
+| Fri 8-10pm | `App.jsx` — root component, tab navigation, header |
+| | Set up the milestone state array (see Runtime milestone state below) |
+| | Wire state updaters: `updateMilestoneStatus()`, `updateMilestoneApproval()`, `updateMilestoneEscrow()` |
+| | Pass milestone state + updaters as props to all panels |
+| Fri 10pm-12am | `FundDashboard.jsx` — fund account balance, escrow list (one row per milestone), tx history |
+| | Show testnet explorer links, overall progress ("2 of 3 milestones released, 175/225 XRP disbursed") |
+| | Test end-to-end with Angelina: condition -> escrow -> finish -> NFT |
+| Sat 10am-12pm | Wire real XRPL calls into everyone's components, integration fixes |
+| Sat 12-2pm | Debug, polish live updates, final integration |
 | Sat 2-3:30pm | Demo prep, bug fixes |
 
-### Tianqi — Donor Experience + App Shell
+### Angelina — Crypto-Conditions + Proof-of-Impact NFTs
 
-You own `DonorPanel.jsx`, `MilestoneBoard.jsx`, and `App.jsx`. The donor's view and the overall app layout.
+You own `condition.js` and `nft.js`. The cryptography layer and the NFT minting with verifiable metadata.
 
 | Time | Task |
 |---|---|
-| Fri 7-8pm | `App.jsx` — root component with tab navigation (Donor / Committee / Milestones / Dashboard) |
-| | Set up the layout: header, tab bar, render active panel |
-| Fri 8-10pm | `DonorPanel.jsx` — donate XRP form, wallet balance display, NFT receipt list |
-| | Stub XRPL calls with console.log (helpers aren't ready yet) |
-| Fri 10pm-12am | `MilestoneBoard.jsx` — milestone cards, status badges (pending/funded/approved/released) |
-| | Style both components with Tailwind |
-| Sat 10am-12pm | Replace stubs with real XRPL calls (Paing/Angelina help) |
-| Sat 12-2pm | Polish UI, loading states, error handling |
+| Fri 7-8pm | Read the Technical Gotchas section — especially the crypto-condition DER encoding and NFT URI hex encoding |
+| Fri 8-10pm | `condition.js` — generateCondition() using Web Crypto API |
+| | Fulfillment DER: `A0 22 80 20 <preimage>`, Fingerprint: SHA-256(raw preimage), Condition DER: `A0 25 80 20 <fingerprint> 81 01 20` |
+| Fri 10pm-12am | `nft.js` — two minting functions: |
+| | `mintDonationNFT({ wallet, donor, totalXRP, milestoneCount })` — Proof-of-Donation |
+| | `mintImpactNFT({ wallet, milestone, xrpAmount, beneficiary, escrowTxHash, releaseTxHash, approvedBy })` — Proof-of-Impact |
+| | `getAccountNFTs(address)` — fetch + decode NFT URIs back to JSON |
+| | Test with Paing end-to-end: generate condition -> create escrow -> finish -> mint both NFT types |
+| Sat 10am-12pm | Help wire NFT minting into DonorPanel and SignerPanel flows |
+| Sat 12-2pm | Polish, help with integration and presentation |
 | Sat 2-3:30pm | Demo prep, bug fixes |
 
-### Andrew — Governance + Data
+### Tianqi — Donor Experience
 
-You own `SignerPanel.jsx` and `milestones.js`. The committee approval flow and demo data.
+You own `DonorPanel.jsx` and `milestones.js`. The donor's view: funding milestones and the NFT impact portfolio.
 
 | Time | Task |
 |---|---|
 | Fri 7-8pm | `src/data/milestones.js` — hardcoded demo milestones (3 milestones, see data shapes below) |
-| | Read PLAN.md, understand the escrow flow and approval logic |
-| Fri 8-10pm | `SignerPanel.jsx` — 3 committee member cards, approve buttons, quorum tracker (2-of-3) |
-| | Approval state is React useState — no blockchain here, just UI logic |
-| | When quorum reached, call `finishEscrow()` (stub it for now) |
-| Fri 10pm-12am | Polish SignerPanel: animations on approval, visual quorum progress |
-| | Help Tianqi with MilestoneBoard status logic if needed |
+| Fri 8-10pm | `DonorPanel.jsx` — "Fund All Milestones" button, donation flow UI |
+| | Show donor wallet balance, donation progress ("Funding milestones... 1/3... 2/3... 3/3 done!") |
+| | Stub XRPL calls with console.log (helpers aren't ready yet) |
+| Fri 10pm-12am | NFT portfolio section in DonorPanel — display Proof-of-Donation + Proof-of-Impact NFTs |
+| | Each NFT card shows decoded metadata (milestone name, amount, tx links) |
+| | Style everything with Tailwind |
+| Sat 10am-12pm | Replace stubs with real XRPL calls (Paing/Angelina help) |
+| Sat 12-2pm | Polish UI, loading states, error handling |
+| Sat 2-3:30pm | Demo prep, bug fixes |
+
+### Andrew — Governance + Milestone Pipeline View
+
+You own `SignerPanel.jsx` and `MilestoneBoard.jsx`. The committee approval flow and the visual milestone pipeline.
+
+| Time | Task |
+|---|---|
+| Fri 7-8pm | Read PLAN.md, understand the multi-milestone escrow flow and per-milestone voting |
+| Fri 8-10pm | `SignerPanel.jsx` — milestone selector (dropdown/tabs), 3 committee member cards per milestone |
+| | Each card has "Approve" button, quorum tracker per milestone (X/3), highlight on 2-of-3 reached |
+| | When quorum reached, call `finishEscrow()` + `mintImpactNFT()` (stub for now) |
+| | Show summary view: which milestones are voted, which are pending |
+| Fri 10pm-12am | `MilestoneBoard.jsx` — milestone pipeline visualization |
+| | Cards with: title, description, XRP amount, status badge, approval count, escrow hash (truncated) |
+| | Statuses: Pending (gray) → Funded (blue) → Approved (yellow) → Released (green) |
+| | Visual flow: show the pipeline progress at a glance |
 | Sat 10am-12pm | Replace stubs with real XRPL calls (Paing helps) |
-| Sat 12-2pm | Help with demo script and presentation |
+| Sat 12-2pm | Polish: animations, transitions, help with presentation |
 | Sat 2-3:30pm | Demo prep, bug fixes |
 
 ---
@@ -262,21 +273,21 @@ git push
 - Shows summary: which milestones are approved, which are pending, which are released
 - Approval state is `useState` only — not on-chain, just app logic
 
-### MilestoneBoard.jsx (Tianqi)
+### MilestoneBoard.jsx (Andrew)
 - Reads initial definitions from `src/data/milestones.js`, gets runtime state via props
 - Shows milestone cards with: title, description, XRP amount, status badge, approval count
 - Statuses: **Pending** (gray), **Funded** (blue), **Approved** (yellow), **Released** (green)
 - Each card shows its escrow sequence number and condition hash (truncated) once funded
 - Visual pipeline: milestones arranged as a progress flow, so you can see the overall state at a glance
 
-### FundDashboard.jsx (Angelina)
+### FundDashboard.jsx (Paing)
 - Live fund account balance
 - Active escrows list — one row per milestone escrow (amount, condition hash, status)
 - Recent transaction history with testnet explorer links
 - Overall progress: "2 of 3 milestones released, 175 of 225 XRP disbursed"
 - Auto-refreshes when new transactions happen
 
-### App.jsx (Tianqi)
+### App.jsx (Paing)
 - Imports all panels
 - Tab bar: Donor | Committee | Milestones | Dashboard
 - Manages which tab is active (useState)
@@ -288,7 +299,7 @@ git push
 
 ## Data Shapes
 
-### milestones.js (Andrew)
+### milestones.js (Tianqi)
 
 This is the static definition. Runtime state is managed in App.jsx.
 
