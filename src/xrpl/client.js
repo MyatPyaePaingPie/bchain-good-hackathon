@@ -7,15 +7,28 @@ let connecting = null;
 
 /**
  * Get a connected XRPL testnet client. Reuses existing connection if alive.
- * Multiple concurrent callers share the same connection promise.
+ * Auto-reconnects on drop. Multiple concurrent callers share the same promise.
  */
 export async function getClient() {
   if (client && client.isConnected()) return client;
   if (connecting) return connecting;
 
   connecting = (async () => {
+    // Tear down stale client if it exists but disconnected
+    if (client) {
+      try { client.removeAllListeners(); } catch {}
+      client = null;
+    }
+
     client = new Client(TESTNET_URL);
     await client.connect();
+
+    // Auto-reconnect on unexpected disconnect
+    client.on("disconnected", () => {
+      console.warn("XRPL WebSocket disconnected — will reconnect on next request");
+      client = null;
+    });
+
     connecting = null;
     return client;
   })();
