@@ -32,6 +32,7 @@ export default function DonorPanel({
   const [loading, setLoading] = useState(false);
   const [contractOpen, setContractOpen] = useState(false);
   const [contractAccepted, setContractAccepted] = useState(false);
+  const [donationAmount, setDonationAmount] = useState(100); // Default to 100 XRP
 
   useEffect(() => {
     const fetch = async () => {
@@ -50,79 +51,91 @@ export default function DonorPanel({
     setCascadeLog([]);
 
     try {
-      // Cascade: try each ranked project in order, skip if full
-      const projectsToFund = [];
+      let remainingBudget = parseFloat(donationAmount);
+      const milestonesToCreate = [];
+      const projectsToFundSet = new Set(); // To track unique projects for markProjectFunded
+
+      // 1. Logic to "Fill" milestones using the user's defined amount
       for (const project of rankedProjects) {
+        if (remainingBudget <= 0) break;
+
         const isFull = project.currentFunded >= project.fundingGoal;
         if (isFull) {
-          setCascadeLog((prev) => [...prev, {
-            project: project.title,
-            action: "skipped",
-            reason: `Full (${project.currentFunded}/${project.fundingGoal} XRP)`,
-          }]);
+          setCascadeLog(prev => [...prev, { project: project.title, action: "skipped", reason: "Already full" }]);
           continue;
         }
-        projectsToFund.push(project);
-        setCascadeLog((prev) => [...prev, {
-          project: project.title,
-          action: "funding",
-          reason: `Has capacity (${project.currentFunded}/${project.fundingGoal} XRP)`,
-        }]);
+
+        for (const milestone of project.milestones) {
+          if (remainingBudget >= milestone.xrpAmount) {
+            milestonesToCreate.push({ project, milestone });
+            projectsToFundSet.add(project.id);
+            remainingBudget -= milestone.xrpAmount;
+            
+            setCascadeLog(prev => [...prev, { 
+              project: project.title, 
+              action: "funding", 
+              reason: `${milestone.title} (${milestone.xrpAmount} XRP)` 
+            }]);
+          } else {
+            // Budget ran out for this project's remaining milestones
+            break; 
+          }
+        }
       }
 
-      if (projectsToFund.length === 0) {
-        setStatus("All your ranked projects are already fully funded. Try different projects.");
+      if (milestonesToCreate.length === 0) {
+        setStatus("Amount too low to fund any ranked milestones.");
         setLoading(false);
         return;
       }
 
-      // Calculate total XRP needed for projects that have room
-      const allMilestones = projectsToFund.flatMap((p) => p.milestones);
-      const totalXRP = allMilestones.reduce((s, m) => s + m.xrpAmount, 0);
+      const totalToSpend = parseFloat(donationAmount) - remainingBudget;
+      setProgress({ current: 0, total: milestonesToCreate.length });
+      setStatus(`Sending ${totalToSpend} XRP to fund account...`);
 
-      setProgress({ current: 0, total: allMilestones.length });
-      setStatus(`Sending ${totalXRP} XRP to fund account...`);
-
+      // 2. Main Payment
       await sendPayment({
         wallet: wallets.donor,
         destination: wallets.fund.address,
-        amount: totalXRP.toString(),
+        amount: totalToSpend.toString(),
       });
 
+      // 3. Loop through the specific milestones we picked
       let count = 0;
-      for (const project of projectsToFund) {
-        for (const milestone of project.milestones) {
-          setStatus(`Creating escrow: ${project.title} — ${milestone.title} (${count + 1}/${allMilestones.length})`);
+      for (const item of milestonesToCreate) {
+        const { project, milestone } = item;
+        setStatus(`Creating escrow: ${project.title} — ${milestone.title} (${count + 1}/${milestonesToCreate.length})`);
 
-          const { condition, fulfillment } = await generateCondition();
-          const { result, sequence } = await createEscrow({
-            fromWallet: wallets.fund,
-            destination: wallets.beneficiary.address,
-            amount: milestone.xrpAmount,
-            condition,
-          });
+        const { condition, fulfillment } = await generateCondition();
+        const { result, sequence } = await createEscrow({
+          fromWallet: wallets.fund,
+          destination: wallets.beneficiary.address,
+          amount: milestone.xrpAmount,
+          condition,
+        });
 
-          const escrowTxHash = result?.result?.tx_json?.hash || null;
-          updateMilestoneEscrow(project.id, milestone.id, {
-            escrowSequence: sequence,
-            condition,
-            fulfillment,
-            escrowTxHash,
-          });
+        const escrowTxHash = result?.result?.tx_json?.hash || null;
+        updateMilestoneEscrow(project.id, milestone.id, {
+          escrowSequence: sequence,
+          condition,
+          fulfillment,
+          escrowTxHash,
+        });
 
-          count++;
-          setProgress({ current: count, total: allMilestones.length });
-        }
-        markProjectFunded(project.id);
+        count++;
+        setProgress({ current: count, total: milestonesToCreate.length });
       }
 
-      // Mint Proof-of-Donation NFT
+      // Mark projects as funded if they were part of the loop
+      projectsToFundSet.forEach(id => markProjectFunded(id));
+
+      // 4. Mint NFT (using totalToSpend instead of totalXRP)
       setStatus("Minting Proof-of-Donation NFT...");
       try {
         const tokenId = await mintDonationNFT({
           wallet: wallets.fund,
           donor: wallets.donor.address,
-          totalXRP,
+          totalXRP: totalToSpend,
           milestoneCount: count,
         });
         addMintedNFT?.({
@@ -130,19 +143,16 @@ export default function DonorPanel({
           metadata: {
             type: "proof-of-donation",
             donor: wallets.donor.address,
-            totalXRP,
+            totalXRP: totalToSpend,
             milestones: count,
             timestamp: new Date().toISOString(),
             fund: wallets.fund.address,
           },
         });
-      } catch (nftErr) {
-        console.error("Donation NFT mint failed:", nftErr);
-        // Non-fatal — escrows are already created
-      }
+      } catch (nftErr) { console.error("NFT Failed", nftErr); }
 
       refreshBalances();
-      setStatus(`Done! Funded ${projectsToFund.length} project${projectsToFund.length > 1 ? "s" : ""} (${count} escrows + donation NFT).`);
+      setStatus(`Done! Spent ${totalToSpend} XRP across ${milestonesToCreate.length} milestones.`);
     } catch (err) {
       setStatus("Error: " + err.message);
     } finally {
@@ -392,6 +402,27 @@ export default function DonorPanel({
                 }`}
               >
                 {loading ? <Loader2 className="animate-spin" size={20} /> : <CheckCircle2 size={20} />}
+                <div className="mb-6 p-4 bg-blue-50/50 rounded-xl border border-blue-100">
+                <label className="block text-sm font-semibold text-blue-900 mb-2">
+                  How much would you like to contribute?
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={donationAmount}
+                    onChange={(e) => setDonationAmount(e.target.value)}
+                    className="w-full pl-4 pr-16 py-3 rounded-lg border-2 border-blue-200 focus:border-blue-500 outline-none text-xl font-bold text-blue-900"
+                    placeholder="0.00"
+                  />
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-blue-400">
+                    XRP
+                  </span>
+                </div>
+                <p className="mt-2 text-xs text-blue-600">
+                  Your donation will fund as many milestones as possible in your ranked order. 
+                  Remaining: <span className="font-mono">{(balance - donationAmount).toFixed(2)} XRP</span>
+                </p>
+              </div>
                 {loading ? `Creating escrows... ${progress.current}/${progress.total}` : "Fund My Top Choices"}
               </button>
             </>
