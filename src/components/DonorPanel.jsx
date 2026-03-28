@@ -135,6 +135,7 @@ export default function DonorPanel({
         const tokenId = await mintDonationNFT({
           wallet: wallets.fund,
           donor: wallets.donor.address,
+          donorName: activeDonor.name,
           totalXRP: totalToSpend,
           milestoneCount: count,
         });
@@ -143,6 +144,7 @@ export default function DonorPanel({
           metadata: {
             type: "proof-of-donation",
             donor: wallets.donor.address,
+            donorName: activeDonor.name,
             totalXRP: totalToSpend,
             milestones: count,
             timestamp: new Date().toISOString(),

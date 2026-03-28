@@ -125,10 +125,11 @@ async function mintNFT({ wallet, uri, memo }) {
  * }} params
  * @returns {string} NFT token ID
  */
-export async function mintDonationNFT({ wallet, donor, totalXRP, milestoneCount }) {
+export async function mintDonationNFT({ wallet, donor, donorName, totalXRP, milestoneCount }) {
   const metadata = {
     type: 'proof-of-donation',
     donor,
+    donorName,
     totalXRP,
     milestones: milestoneCount,
     timestamp: new Date().toISOString(),
@@ -187,6 +188,7 @@ export async function mintImpactNFT({
   const metadata = {
     t: 'poi',
     mid: milestone.id,
+    mt: milestone.title,
     xrp: xrpAmount,
     to: beneficiary,
     esc: escrowTxHash,

@@ -13,6 +13,7 @@ export const WALLETS = {
   beneficiary: {
     address: import.meta.env.VITE_BENEFICIARY_ADDRESS,
     seed: import.meta.env.VITE_BENEFICIARY_SEED,
+    name: "GiveWithProof Foundation",
   },
   reserve: {
     address: import.meta.env.VITE_RESERVE_ADDRESS,

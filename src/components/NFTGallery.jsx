@@ -42,7 +42,7 @@ function DonationCard({ nft }) {
         <NFTokenLink tokenId={nft.NFTokenID} />
       </div>
       <div className="px-4 py-3 space-y-2 text-sm">
-        <Row label="Donor" value={truncAddr(m.donor)} title={m.donor} />
+        <Row label="Donor" value={m.donorName ?? truncAddr(m.donor)} title={m.donor} />
         <Row label="Total donated" value={m.totalXRP != null ? `${m.totalXRP} XRP` : "—"} />
         <Row label="Milestones funded" value={m.milestones ?? "—"} />
         <Row label="Fund wallet" value={truncAddr(m.fund)} title={m.fund} />
@@ -52,7 +52,7 @@ function DonationCard({ nft }) {
   );
 }
 
-function ImpactCard({ nft }) {
+function ImpactCard({ nft, beneficiaryName }) {
   const m = nft.metadata ?? {};
   return (
     <div className="bg-white rounded-lg border border-green-200 overflow-hidden">
@@ -63,9 +63,9 @@ function ImpactCard({ nft }) {
         <NFTokenLink tokenId={nft.NFTokenID} />
       </div>
       <div className="px-4 py-3 space-y-2 text-sm">
-        <Row label="Milestone" value={m.mid != null ? `#${m.mid}` : "—"} />
+        <Row label="Milestone" value={m.mt ?? (m.mid != null ? `#${m.mid}` : "—")} title={m.mid != null ? `ID: ${m.mid}` : undefined} />
         <Row label="XRP released" value={m.xrp != null ? `${m.xrp} XRP` : "—"} />
-        <Row label="Beneficiary" value={truncAddr(m.to)} title={m.to} />
+        <Row label="Beneficiary" value={beneficiaryName ?? truncAddr(m.to)} title={m.to} />
         <div className="flex justify-between gap-2">
           <span className="text-gray-500">Escrow tx</span>
           {m.esc ? (
@@ -201,7 +201,7 @@ export default function NFTGallery({ mintedNFTs = [], wallets }) {
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {impactNFTs.map((nft) => (
-              <ImpactCard key={nft.NFTokenID} nft={nft} />
+              <ImpactCard key={nft.NFTokenID} nft={nft} beneficiaryName={wallets?.beneficiary?.name} />
             ))}
           </div>
         )}

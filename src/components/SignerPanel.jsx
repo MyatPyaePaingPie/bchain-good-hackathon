@@ -107,6 +107,7 @@ export default function SignerPanel({
           metadata: {
             t: "poi",
             mid: milestone.id,
+            mt: milestone.title,
             xrp: milestone.xrpAmount,
             to: wallets?.beneficiary?.address || "unknown",
             esc: milestone.escrowTxHash || "",
