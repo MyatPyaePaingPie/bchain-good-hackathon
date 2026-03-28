@@ -1,3 +1,5 @@
+import { useState, useEffect } from "react";
+import { getAccountNFTs } from "../xrpl/nft";
 
 const EXPLORER_BASE = "https://testnet.xrpl.org";
 
@@ -129,9 +131,43 @@ function EmptyState({ message }) {
   );
 }
 
-export default function NFTGallery({ mintedNFTs = [] }) {
-  const donationNFTs = mintedNFTs.filter((n) => n.metadata?.type === "proof-of-donation");
-  const impactNFTs = mintedNFTs.filter((n) => n.metadata?.t === "poi");
+export default function NFTGallery({ mintedNFTs = [], wallets }) {
+  const [onChainNFTs, setOnChainNFTs] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchNFTs() {
+      try {
+        const fundAddr = wallets?.fund?.address;
+        if (!fundAddr) { setLoading(false); return; }
+        const nfts = await getAccountNFTs(fundAddr);
+        if (!cancelled) setOnChainNFTs(nfts);
+      } catch (err) {
+        console.error("Failed to fetch on-chain NFTs:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    fetchNFTs();
+    const interval = setInterval(fetchNFTs, 15000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [wallets?.fund?.address]);
+
+  // Merge: session-minted NFTs + on-chain NFTs (dedupe by token ID)
+  const seen = new Set();
+  const allNFTs = [];
+  for (const nft of [...mintedNFTs, ...onChainNFTs]) {
+    const id = nft.NFTokenID;
+    if (id && !seen.has(id)) { seen.add(id); allNFTs.push(nft); }
+  }
+
+  const donationNFTs = allNFTs.filter((n) => n.metadata?.type === "proof-of-donation");
+  const impactNFTs = allNFTs.filter((n) => n.metadata?.t === "poi");
+
+  if (loading) {
+    return <div className="text-center text-gray-400 py-10">Loading NFTs from testnet...</div>;
+  }
 
   return (
     <div className="space-y-8">

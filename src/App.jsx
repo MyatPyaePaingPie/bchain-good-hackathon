@@ -270,7 +270,7 @@ export default function App() {
         {activeTab === "committee" && <SignerPanel {...sharedProps} />}
         {activeTab === "milestones" && <MilestoneBoard {...sharedProps} />}
         {activeTab === "dashboard" && <FundDashboard {...sharedProps} />}
-        {activeTab === "gallery" && <NFTGallery mintedNFTs={mintedNFTs} />}
+        {activeTab === "gallery" && <NFTGallery mintedNFTs={mintedNFTs} wallets={WALLETS} />}
       </main>
     </div>
   );
