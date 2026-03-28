@@ -1,12 +1,21 @@
 import { Client } from "xrpl";
 
-const TESTNET_URL = "wss://s.altnet.rippletest.net:51233";
+const TESTNET_URLS = [
+  "wss://s.altnet.rippletest.net:51233",
+  "wss://testnet.xrpl-labs.com",
+];
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 2000;
 
 let client = null;
 let connecting = null;
 
+async function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 /**
- * Get a connected XRPL testnet client. Reuses existing connection if alive.
+ * Get a connected XRPL testnet client. Retries across multiple servers.
  * Auto-reconnects on drop. Multiple concurrent callers share the same promise.
  */
 export async function getClient() {
@@ -14,23 +23,34 @@ export async function getClient() {
   if (connecting) return connecting;
 
   connecting = (async () => {
-    // Tear down stale client if it exists but disconnected
     if (client) {
       try { client.removeAllListeners(); } catch {}
       client = null;
     }
 
-    client = new Client(TESTNET_URL);
-    await client.connect();
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      const url = TESTNET_URLS[attempt % TESTNET_URLS.length];
+      try {
+        client = new Client(url);
+        await client.connect();
 
-    // Auto-reconnect on unexpected disconnect
-    client.on("disconnected", () => {
-      console.warn("XRPL WebSocket disconnected — will reconnect on next request");
-      client = null;
-    });
+        client.on("disconnected", () => {
+          console.warn("XRPL WebSocket disconnected — will reconnect on next request");
+          client = null;
+        });
+
+        connecting = null;
+        return client;
+      } catch (err) {
+        console.warn(`XRPL connect attempt ${attempt + 1}/${MAX_RETRIES} failed (${url}):`, err.message);
+        if (client) { try { client.removeAllListeners(); } catch {} }
+        client = null;
+        if (attempt < MAX_RETRIES - 1) await sleep(RETRY_DELAY);
+      }
+    }
 
     connecting = null;
-    return client;
+    throw new Error("Failed to connect to XRPL testnet after " + MAX_RETRIES + " attempts");
   })();
 
   return connecting;
