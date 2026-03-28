@@ -3,15 +3,24 @@ import { Client } from "xrpl";
 const TESTNET_URL = "wss://s.altnet.rippletest.net:51233";
 
 let client = null;
+let connecting = null;
 
 /**
  * Get a connected XRPL testnet client. Reuses existing connection if alive.
+ * Multiple concurrent callers share the same connection promise.
  */
 export async function getClient() {
   if (client && client.isConnected()) return client;
-  client = new Client(TESTNET_URL);
-  await client.connect();
-  return client;
+  if (connecting) return connecting;
+
+  connecting = (async () => {
+    client = new Client(TESTNET_URL);
+    await client.connect();
+    connecting = null;
+    return client;
+  })();
+
+  return connecting;
 }
 
 /**
