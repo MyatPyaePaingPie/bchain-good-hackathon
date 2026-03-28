@@ -20,3 +20,5 @@ export const MILESTONES = [
     xrpAmount: 50,
   },
 ];
+
+export const TOTAL_FUNDING_GOAL = MILESTONES.reduce((sum, m) => sum + m.xrpAmount, 0);
