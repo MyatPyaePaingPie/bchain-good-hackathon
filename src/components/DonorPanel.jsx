@@ -301,32 +301,36 @@ export default function DonorPanel({
               </button>
             </div>
             <div className="overflow-y-auto px-6 py-4 text-sm text-gray-700 space-y-3 flex-1">
-              <p className="font-semibold text-gray-900">GiveWithProof Donor Contribution Agreement with Grant Advisory Terms</p>
+              <p className="font-semibold text-gray-900">GiveWithProof Donor Contribution Agreement</p>
               <p>By proceeding, you acknowledge and agree to the following key terms:</p>
               <div className="space-y-2 text-xs text-gray-600">
                 <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="font-semibold text-gray-800 mb-1">1. Irrevocability</p>
-                  <p>All contributions are irrevocable. Once submitted, you retain no legal right to request return of contributed assets.</p>
+                  <p className="font-semibold text-gray-800 mb-1">1. Irrevocability (Section 2.2)</p>
+                  <p>All contributions are irrevocable. Once submitted, you retain no legal or equitable right, title, or interest in the contributed assets. You cannot revoke, modify, or request return of any contribution.</p>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="font-semibold text-gray-800 mb-1">2. No Direct Control</p>
-                  <p>Your project selections are non-binding recommendations. The Sponsor retains exclusive legal control and final discretion over all grants.</p>
+                  <p className="font-semibold text-gray-800 mb-1">2. Sponsor Discretion (Section 3)</p>
+                  <p>Your project selections are non-binding advisory recommendations only. The Sponsor retains exclusive legal control and final discretion over all grants. The Sponsor may reject any recommendation for compliance, legal, or operational reasons.</p>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="font-semibold text-gray-800 mb-1">3. Milestone-Based Disbursement</p>
-                  <p>Funds are locked in XRPL escrows per milestone. A committee of 3 must approve (2-of-3) before each milestone releases. Subsequent milestones only unlock after prior milestones are verified.</p>
+                  <p className="font-semibold text-gray-800 mb-1">3. Program Selection & Cascade (Section 5)</p>
+                  <p>You select Programs in order of preference. If your First Preference has a surplus (fully funded), your contribution cascades to your next preference. Program selection is a non-binding suggestion, not a legal restriction on fund use.</p>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="font-semibold text-gray-800 mb-1">4. Cascade Funding</p>
-                  <p>If your top-ranked project is fully funded, your contribution automatically cascades to your next preference.</p>
+                  <p className="font-semibold text-gray-800 mb-1">4. No Earmarking (Section 5.1)</p>
+                  <p>The Platform is a transparency tool, not an earmarking mechanism. You cannot direct that specific funds be used for a specific individual or discrete purchase.</p>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="font-semibold text-gray-800 mb-1">5. On-Chain Transparency</p>
-                  <p>All escrow transactions, releases, and Proof-of-Impact NFTs are recorded on the XRP Ledger and publicly verifiable.</p>
+                  <p className="font-semibold text-gray-800 mb-1">5. International Compliance (Section 4)</p>
+                  <p>Grants to foreign entities require Equivalency Determination or Expenditure Responsibility procedures. Form 1023 is not applicable to foreign entities.</p>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="font-semibold text-gray-800 mb-1">6. Timeout Protection</p>
-                  <p>If a milestone is not approved within 30 days, the escrow can be cancelled and funds returned to the fund account.</p>
+                  <p className="font-semibold text-gray-800 mb-1">6. Transparency & Reporting (Section 5.6)</p>
+                  <p>Impact reports and allocation data are good-faith estimates, not audit-quality representations. On-chain escrow transactions, releases, and Proof-of-Impact NFTs are publicly verifiable on the XRP Ledger.</p>
+                </div>
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <p className="font-semibold text-gray-800 mb-1">7. Limitation of Liability (Section 6)</p>
+                  <p>Sponsor is not liable for indirect, incidental, or consequential damages. Data on the Platform is provided for informational purposes and may not be error-free.</p>
                 </div>
               </div>
               <a
