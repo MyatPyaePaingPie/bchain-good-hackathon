@@ -13,9 +13,12 @@ const RANK_COLORS = {
 const RANK_LABELS = { 1: "1st", 2: "2nd", 3: "3rd" };
 
 export default function DonorPanel({
+  activeDonor,
+  demoDonors,
   projects,
   rankedProjects,
   wallets,
+  setActiveDonorId,
   toggleProjectRank,
   markProjectFunded,
   updateMilestoneEscrow,
@@ -153,11 +156,31 @@ export default function DonorPanel({
       <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-6 text-white shadow-lg">
         <div className="flex justify-between items-start">
           <div>
+            <p className="text-blue-100 text-xs font-semibold uppercase tracking-[0.18em]">Acting As</p>
+            <div className="mt-2 max-w-xs">
+              <select
+                value={activeDonor.id}
+                onChange={(event) => setActiveDonorId(event.target.value)}
+                disabled={loading}
+                className="w-full rounded-xl border border-white/20 bg-white/15 px-3 py-2 text-sm text-white outline-none backdrop-blur-sm disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {demoDonors.map((donor) => (
+                  <option key={donor.id} value={donor.id} className="text-gray-900">
+                    {donor.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="mt-2 text-xs text-blue-100">{activeDonor.note}</p>
+
             <p className="text-blue-100 text-sm font-medium flex items-center gap-2">
               <Wallet size={16} /> Donor Wallet
             </p>
             <h2 className="text-3xl font-bold mt-1">{balance} <span className="text-lg">XRP</span></h2>
             <code className="text-[10px] opacity-70 mt-2 block break-all">{wallets.donor.address}</code>
+            <p className="mt-2 text-[10px] text-blue-100/80">
+              Demo mode: rankings are stored separately per donor, while XRPL actions still use the shared testnet donor wallet.
+            </p>
           </div>
           <div className="bg-white/20 p-3 rounded-xl">
             <Gift size={24} />

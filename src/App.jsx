@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import "./app.css";
 import { WALLETS } from "./data/wallets.js";
 import { PROJECTS } from "./data/projects.js";
+import { DEMO_DONORS } from "./data/demoDonors.js";
 import { getBalance, disconnect } from "./xrpl/client.js";
 import { getProjects } from "./lib/projects.js";
 import DonorPanel from "./components/DonorPanel.jsx";
@@ -9,6 +10,9 @@ import SignerPanel from "./components/SignerPanel.jsx";
 import MilestoneBoard from "./components/MilestoneBoard.jsx";
 import FundDashboard from "./components/FundDashboard.jsx";
 import NFTGallery from "./components/NFTGallery.jsx";
+
+const ACTIVE_DONOR_STORAGE_KEY = "nonprofit-escrow:active-donor";
+const DONOR_RANKINGS_STORAGE_PREFIX = "nonprofit-escrow:rankings:";
 
 const TABS = [
   { id: "donor", label: "Donor" },
@@ -41,6 +45,59 @@ function buildProjectState(projectDefs) {
   }));
 }
 
+function getStoredActiveDonorId() {
+  if (typeof window === "undefined") return DEMO_DONORS[0].id;
+  return window.localStorage.getItem(ACTIVE_DONOR_STORAGE_KEY) || DEMO_DONORS[0].id;
+}
+
+function getRankingsStorageKey(donorId) {
+  return `${DONOR_RANKINGS_STORAGE_PREFIX}${donorId}`;
+}
+
+function readStoredRankedProjectIds(donorId) {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const raw = window.localStorage.getItem(getRankingsStorageKey(donorId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.error("Failed to read donor rankings from localStorage:", error);
+    return [];
+  }
+}
+
+function writeStoredRankedProjectIds(donorId, rankedProjectIds) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(
+      getRankingsStorageKey(donorId),
+      JSON.stringify(rankedProjectIds)
+    );
+  } catch (error) {
+    console.error("Failed to persist donor rankings to localStorage:", error);
+  }
+}
+
+function applyDonorRankings(projectDefs, donorId) {
+  const rankedProjectIds = readStoredRankedProjectIds(donorId);
+  const rankMap = new Map(rankedProjectIds.map((projectId, index) => [projectId, index + 1]));
+
+  return buildProjectState(projectDefs).map((project) => ({
+    ...project,
+    rank: rankMap.get(project.id) ?? null,
+  }));
+}
+
+function extractRankedProjectIds(projects) {
+  return projects
+    .filter((project) => project.rank !== null)
+    .sort((a, b) => a.rank - b.rank)
+    .map((project) => project.id);
+}
+
 /** Determine the effective display status of a milestone based on trickle-down gating */
 export function getEffectiveStatus(milestone, allMilestonesInProject) {
   // If pending or released/approved, return as-is
@@ -60,10 +117,13 @@ export function getEffectiveStatus(milestone, allMilestonesInProject) {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState("donor");
+  const [activeDonorId, setActiveDonorId] = useState(() => getStoredActiveDonorId());
   const [balances, setBalances] = useState({ donor: null, fund: null, beneficiary: null });
 
   // Projects state: full catalog with ranking + funded state
-  const [projects, setProjects] = useState(() => buildProjectState(PROJECTS));
+  const [projects, setProjects] = useState(() => applyDonorRankings(PROJECTS, getStoredActiveDonorId()));
+
+  const activeDonor = DEMO_DONORS.find((donor) => donor.id === activeDonorId) ?? DEMO_DONORS[0];
 
   // Derived
   const fundedProjects = projects.filter((p) => p.funded);
@@ -99,12 +159,12 @@ export default function App() {
       try {
         const dbProjects = await getProjects();
         if (!cancelled) {
-          setProjects(buildProjectState(dbProjects));
+          setProjects(applyDonorRankings(dbProjects, activeDonorId));
         }
       } catch (err) {
         console.error("Failed to load projects from Supabase, using local seed data:", err);
         if (!cancelled) {
-          setProjects(buildProjectState(PROJECTS));
+          setProjects(applyDonorRankings(PROJECTS, activeDonorId));
         }
       }
     }
@@ -115,6 +175,29 @@ export default function App() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(ACTIVE_DONOR_STORAGE_KEY, activeDonorId);
+  }, [activeDonorId]);
+
+  useEffect(() => {
+    const rankedProjectIds = readStoredRankedProjectIds(activeDonorId);
+    const rankMap = new Map(
+      rankedProjectIds.map((projectId, index) => [projectId, index + 1])
+    );
+
+    setProjects((prev) =>
+      prev.map((project) => ({
+        ...project,
+        rank: rankMap.get(project.id) ?? null,
+      }))
+    );
+  }, [activeDonorId]);
+
+  useEffect(() => {
+    writeStoredRankedProjectIds(activeDonorId, extractRankedProjectIds(projects));
+  }, [activeDonorId, projects]);
 
   // --- State updaters ---
 
@@ -224,11 +307,14 @@ export default function App() {
   }, []);
 
   const sharedProps = {
+    activeDonor,
+    demoDonors: DEMO_DONORS,
     projects,
     fundedProjects,
     rankedProjects,
     wallets: WALLETS,
     balances,
+    setActiveDonorId,
     toggleProjectRank,
     markProjectFunded,
     updateMilestoneEscrow,
