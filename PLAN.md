@@ -22,16 +22,23 @@ A browser app that makes nonprofit fund management transparent using the XRP Led
 - A committee of 3 votes per milestone (2-of-3 required)
 - Proof-of-Impact NFTs prove every disbursement
 
-**Flow (project-based, trickle-down):**
+**Flow (ranked preferences + cascade + trickle-down):**
 ```
-Nonprofit lists 5 projects, each with 2-3 sequential milestones
+Nonprofit lists 5 projects, each with a funding cap and 2-3 sequential milestones
      |
-Donor browses projects --> selects up to 3 --> clicks "Fund Selected"
+Donor browses projects --> RANKS up to 3 in preference order (1st, 2nd, 3rd)
      |
-For each selected project:
+Clicks "Fund My Top Choices"
+     |
+CASCADE LOGIC:
+  #1 pick full?  → skip, log "Solar School — skipped (250/250 XRP)"
+  #2 pick has room? → fund it
+  #3 pick has room? → fund it
+     |
+For each fundable project:
   Fund Account --> EscrowCreate for ALL milestones upfront (each has own condition)
      |
-     Project: "Clean Water Initiative"
+     Project: "Clean Water Initiative" (fundingGoal: 225, currentFunded: 0)
      ├── Milestone 1: "Purchase Filters"  — 100 XRP locked  [VOTEABLE]
      ├── Milestone 2: "Distribution"      — 75 XRP locked   [LOCKED — waits for M1]
      └── Milestone 3: "Training"          — 50 XRP locked   [LOCKED — waits for M2]
@@ -46,16 +53,18 @@ Milestone 2 UNLOCKS for voting (trickle-down)
 ```
 
 **What makes this interesting:**
-- **Donor choice:** donors pick which projects matter to them, not just dump money
+- **Ranked preferences:** donors rank projects by what matters most to them
+- **Cascade funding:** if top choice is full, money flows to next choice automatically — no wasted intent
 - **Trickle-down accountability:** milestone 2 only unlocks after milestone 1 proves impact
-- **Multiple projects visible on-chain:** each escrow is independently auditable
-- **Failure isolation:** if a project's milestone 1 fails review, milestones 2 & 3 stay locked forever (or cancel after timeout, funds return)
+- **Funding caps:** each project has a goal; once met, new donors cascade to other projects
+- **Failure isolation:** if a milestone fails review, remaining milestones stay locked (cancel after timeout, funds return)
 
 **Key design decisions:**
 - Escrow gating uses crypto-conditions (NOT on-chain multisig). One condition/fulfillment pair per milestone.
 - All escrows created upfront (visible on-chain from day 1). Sequential gating is enforced in app UI, not on-chain.
 - 2-of-3 approval logic is React state, tracked per milestone. When a milestone hits quorum AND its predecessor is released, the app submits EscrowFinish.
-- Donors see a catalog of projects and choose which to fund. Up to 3 projects per donation.
+- Donors rank up to 3 projects. Cascade skips full projects, funds the rest in preference order.
+- Each project has `fundingGoal` (cap) and `currentFunded` (how much already contributed by other donors).
 
 **No backend.** Everything runs in the browser. Wallet seeds are testnet-only (no real money). State resets on refresh — that's fine for a 3-minute demo.
 
@@ -119,19 +128,19 @@ Not just receipt tokens — these NFTs encode verifiable data about what happene
 ```
 src/
   xrpl/
-    client.js               # Paing — WebSocket connection + account queries (DONE)
-    escrow.js               # Paing — EscrowCreate / EscrowFinish (DONE)
-    condition.js            # Angelina — crypto-condition generation (Web Crypto API)
-    nft.js                  # Angelina — NFTokenMint / getAccountNFTs + proof-of-impact metadata
+    client.js               # Paing (DONE) — WebSocket connection, balance, tx queries
+    escrow.js               # Paing (DONE) — EscrowCreate / EscrowFinish
+    condition.js            # Angelina (DONE) — crypto-condition generation (Web Crypto API)
+    nft.js                  # Angelina (TODO) — NFTokenMint + proof-of-impact metadata
   components/
-    DonorPanel.jsx          # Tianqi — donate form, multi-escrow funding, NFT portfolio
-    SignerPanel.jsx         # Andrew — per-milestone committee approval, quorum tracker
-    MilestoneBoard.jsx      # Andrew — milestone cards, status badges, pipeline view
-    FundDashboard.jsx       # Paing — live balances, escrow list, tx history
+    DonorPanel.jsx          # Paing (DONE) — ranked project selection, cascade funding, escrow creation
+    SignerPanel.jsx         # Paing (DONE) — per-project/milestone voting, trickle-down gating, EscrowFinish
+    MilestoneBoard.jsx      # Andrew (BASIC) — pipeline view, needs polish
+    FundDashboard.jsx       # Paing (DONE) — live balances, per-project escrow list, tx history
   data/
-    milestones.js           # Tianqi — hardcoded demo milestones
-    wallets.js              # Paing — testnet wallet configs (DONE)
-  App.jsx                   # Paing — root component, milestone state management, layout
+    projects.js             # Paing (DONE) — 5 projects with funding caps and sequential milestones
+    wallets.js              # Paing (DONE) — 4 testnet wallet configs
+  App.jsx                   # Paing (DONE) — project/milestone state, gating logic, ranked selection, cascade
   app.css                   # shared — Tailwind entry point
   main.jsx
 ```
@@ -140,81 +149,33 @@ src/
 
 ---
 
-## Work Split (by person, by file — no overlaps)
+## Current Status + Remaining Work
 
-### Paing — State Management + Dashboard + XRPL Layer
+### What's DONE
 
-You own `client.js` (DONE), `escrow.js` (DONE), `wallets.js` (DONE), `App.jsx`, and `FundDashboard.jsx`.
+| File | Owner | Status |
+|---|---|---|
+| `xrpl/client.js` | Paing | Done — tested, race condition fixed |
+| `xrpl/escrow.js` | Paing | Done — tested end-to-end on testnet |
+| `xrpl/condition.js` | Angelina | Done — correct DER encoding verified |
+| `data/projects.js` | Paing | Done — 5 projects, funding caps, 2 pre-filled for cascade demo |
+| `data/wallets.js` | Paing | Done — 4 testnet wallets |
+| `App.jsx` | Paing | Done — nested project/milestone state, trickle-down gating, ranked selection, cascade |
+| `DonorPanel.jsx` | Paing | Done — ranked preferences (1st/2nd/3rd), cascade logic, wired to real XRPL |
+| `SignerPanel.jsx` | Paing | Done — per-project nav, per-milestone voting with lock states, real EscrowFinish |
+| `FundDashboard.jsx` | Paing | Done — grouped by project, progress bars, tx history with explorer links |
 
-XRPL core is finished. Now you own the app's brain (App.jsx state management) and the transparency dashboard.
+### What's REMAINING
 
-| Time | Task |
-|---|---|
-| Fri 7-8pm | ~~Generate wallets, write client.js, escrow.js~~ DONE |
-| Fri 8-10pm | `App.jsx` — root component, tab navigation, header |
-| | Set up the milestone state array (see Runtime milestone state below) |
-| | Wire state updaters: `updateMilestoneStatus()`, `updateMilestoneApproval()`, `updateMilestoneEscrow()` |
-| | Pass milestone state + updaters as props to all panels |
-| Fri 10pm-12am | `FundDashboard.jsx` — fund account balance, escrow list (one row per milestone), tx history |
-| | Show testnet explorer links, overall progress ("2 of 3 milestones released, 175/225 XRP disbursed") |
-| | Test end-to-end with Angelina: condition -> escrow -> finish -> NFT |
-| Sat 10am-12pm | Wire real XRPL calls into everyone's components, integration fixes |
-| Sat 12-2pm | Debug, polish live updates, final integration |
-| Sat 2-3:30pm | Demo prep, bug fixes |
-
-### Angelina — Crypto-Conditions + Proof-of-Impact NFTs
-
-You own `condition.js` and `nft.js`. The cryptography layer and the NFT minting with verifiable metadata.
-
-| Time | Task |
-|---|---|
-| Fri 7-8pm | Read the Technical Gotchas section — especially the crypto-condition DER encoding and NFT URI hex encoding |
-| Fri 8-10pm | `condition.js` — generateCondition() using Web Crypto API |
-| | Fulfillment DER: `A0 22 80 20 <preimage>`, Fingerprint: SHA-256(raw preimage), Condition DER: `A0 25 80 20 <fingerprint> 81 01 20` |
-| Fri 10pm-12am | `nft.js` — two minting functions: |
-| | `mintDonationNFT({ wallet, donor, totalXRP, milestoneCount })` — Proof-of-Donation |
-| | `mintImpactNFT({ wallet, milestone, xrpAmount, beneficiary, escrowTxHash, releaseTxHash, approvedBy })` — Proof-of-Impact |
-| | `getAccountNFTs(address)` — fetch + decode NFT URIs back to JSON |
-| | Test with Paing end-to-end: generate condition -> create escrow -> finish -> mint both NFT types |
-| Sat 10am-12pm | Help wire NFT minting into DonorPanel and SignerPanel flows |
-| Sat 12-2pm | Polish, help with integration and presentation |
-| Sat 2-3:30pm | Demo prep, bug fixes |
-
-### Tianqi — Donor Experience
-
-You own `DonorPanel.jsx` and `milestones.js`. The donor's view: funding milestones and the NFT impact portfolio.
-
-| Time | Task |
-|---|---|
-| Fri 7-8pm | `src/data/milestones.js` — hardcoded demo milestones (3 milestones, see data shapes below) |
-| Fri 8-10pm | `DonorPanel.jsx` — "Fund All Milestones" button, donation flow UI |
-| | Show donor wallet balance, donation progress ("Funding milestones... 1/3... 2/3... 3/3 done!") |
-| | Stub XRPL calls with console.log (helpers aren't ready yet) |
-| Fri 10pm-12am | NFT portfolio section in DonorPanel — display Proof-of-Donation + Proof-of-Impact NFTs |
-| | Each NFT card shows decoded metadata (milestone name, amount, tx links) |
-| | Style everything with Tailwind |
-| Sat 10am-12pm | Replace stubs with real XRPL calls (Paing/Angelina help) |
-| Sat 12-2pm | Polish UI, loading states, error handling |
-| Sat 2-3:30pm | Demo prep, bug fixes |
-
-### Andrew — Governance + Milestone Pipeline View
-
-You own `SignerPanel.jsx` and `MilestoneBoard.jsx`. The committee approval flow and the visual milestone pipeline.
-
-| Time | Task |
-|---|---|
-| Fri 7-8pm | Read PLAN.md, understand the multi-milestone escrow flow and per-milestone voting |
-| Fri 8-10pm | `SignerPanel.jsx` — milestone selector (dropdown/tabs), 3 committee member cards per milestone |
-| | Each card has "Approve" button, quorum tracker per milestone (X/3), highlight on 2-of-3 reached |
-| | When quorum reached, call `finishEscrow()` + `mintImpactNFT()` (stub for now) |
-| | Show summary view: which milestones are voted, which are pending |
-| Fri 10pm-12am | `MilestoneBoard.jsx` — milestone pipeline visualization |
-| | Cards with: title, description, XRP amount, status badge, approval count, escrow hash (truncated) |
-| | Statuses: Pending (gray) → Funded (blue) → Approved (yellow) → Released (green) |
-| | Visual flow: show the pipeline progress at a glance |
-| Sat 10am-12pm | Replace stubs with real XRPL calls (Paing helps) |
-| Sat 12-2pm | Polish: animations, transitions, help with presentation |
-| Sat 2-3:30pm | Demo prep, bug fixes |
+| Task | Owner | Priority |
+|---|---|---|
+| `xrpl/nft.js` — Proof-of-Impact NFT minting | Angelina | High |
+| `MilestoneBoard.jsx` — polish pipeline visualization | Andrew | Medium |
+| Wire NFT minting into DonorPanel + SignerPanel flows | Angelina + Paing | High (after nft.js) |
+| Legal contract integration (review + hash in escrow memos) | Paing + lawyer teammate | Medium |
+| End-to-end browser test of full flow | Everyone | High |
+| Delete stale `data/milestones.js` | Anyone | Low |
+| Demo script + presentation | Everyone | Saturday |
 
 ---
 
@@ -259,143 +220,100 @@ git push
 
 ## Component Specs
 
-### DonorPanel.jsx (Tianqi)
-- Shows donor wallet balance (live)
-- **Project catalog:** shows all available projects as cards
-- Each card: project title, description, total XRP needed, milestone count
-- Donor checks up to 3 projects (checkbox/toggle on each card)
-- "Fund Selected Projects" button -> sends total XRP to fund account, creates escrows for ALL milestones in selected projects
-- Progress indicator: "Creating escrows... 3/8 done"
-- **NFT portfolio section:** Proof-of-Donation + Proof-of-Impact NFTs
+### DonorPanel.jsx (DONE)
+- Donor wallet balance (live, auto-refresh)
+- **Ranked project selection:** click projects to rank 1st/2nd/3rd (gold/silver/bronze badges)
+- Each card shows: title, description, milestone count, funding progress bar (currentFunded/fundingGoal), "Fully funded" badge if at cap
+- **"Fund My Top Choices"** button with cascade logic:
+  - Iterates ranked projects in order, skips full ones, funds the rest
+  - Cascade log shows what happened: "Solar School — skipped (full)" / "Clean Water — funding"
+- Creates escrows for all milestones in fundable projects
+- Shows funded projects summary with release progress
 
-### SignerPanel.jsx (Andrew)
-- **Project selector** (dropdown/tabs) to pick which funded project to review
-- Within that project: shows milestones in sequential order
-- **Trickle-down gating:** only the first unfunded/unreleased milestone is voteable. Milestone 2 shows "Locked — waiting for Milestone 1" until Milestone 1 is released.
-- For the active milestone: 3 committee member cards with "Approve" buttons
-- Quorum tracker, auto-triggers EscrowFinish on 2-of-3
-- Shows project-level summary: "2 of 3 milestones released"
+### SignerPanel.jsx (DONE)
+- **Project selector tabs** to pick which funded project to review
+- Per-project summary cards: total milestones, voteable count, released count
+- **Per-milestone voting cards** with trickle-down gating:
+  - Only voteable milestones accept votes
+  - Locked milestones show "Locked — waiting for Milestone N-1"
+  - Quorum progress bar per milestone
+- 3 committee members (NGO Rep, Donor Rep, Community Auditor) as toggle buttons
+- Auto-triggers real EscrowFinish when 2-of-3 approve, auto-unlocks next milestone
 
-### MilestoneBoard.jsx (Andrew)
-- Shows ALL funded projects, each with its milestone pipeline
-- Per project: sequential milestone cards showing the trickle-down flow
-- Statuses: **Pending** (gray), **Funded** (blue), **Voteable** (indigo), **Approved** (yellow), **Released** (green), **Locked** (gray dashed)
-- Visual connection between milestones (arrows or progress line showing sequential dependency)
-- The "at a glance" view of where all projects stand
+### MilestoneBoard.jsx (BASIC — Andrew can polish)
+- Shows all funded projects with milestone pipeline
+- Per project: sequential cards with M1 → M2 → M3 arrows
+- Status badges: pending, locked, voteable, approved, released
+- Needs: better styling, approval counts, escrow hash display
 
-### FundDashboard.jsx (Paing)
-- Live balance cards (donor, fund, beneficiary)
-- **Grouped by project:** each funded project shows its escrows and progress
-- Per-project progress bar: "2 of 3 milestones released, 175/225 XRP disbursed"
-- Overall aggregate: total locked, total released, total projects funded
-- Recent transactions with testnet explorer links
+### FundDashboard.jsx (DONE)
+- Balance cards: donor, fund, beneficiary (live)
+- Overall disbursement progress bar with aggregate stats
+- **Per-project sections:** each funded project with milestone rows, status badges, explorer links for escrow + release tx hashes
+- Recent transaction history with testnet explorer links
 
-### App.jsx (Paing)
-- Imports all panels
+### App.jsx (DONE)
 - Tab bar: Donor | Committee | Milestones | Dashboard
-- **Owns project + milestone state** — nested structure: projects[] → milestones[]
-- Gating logic: `updateMilestoneReleased` auto-unlocks next milestone in sequence
-- State updaters: `selectProject()`, `updateMilestoneEscrow()`, `updateMilestoneApproval()`, `updateMilestoneReleased()`
-- Header with app name + tagline
+- **Owns all state:** projects array with nested milestones, ranked selection, funded status
+- `getEffectiveStatus()` — exported helper for trickle-down display logic
+- State updaters: `toggleProjectRank()`, `markProjectFunded()`, `updateMilestoneEscrow()`, `updateMilestoneApproval()`, `updateMilestoneReleased()`
+- `updateMilestoneReleased` auto-unlocks next milestone in sequence
+- Balance polling every 10s
 
 ---
 
 ## Data Shapes
 
-### projects.js (Tianqi — renamed from milestones.js)
+### projects.js (DONE)
 
-The nonprofit's project catalog. Static definitions. Runtime state managed in App.jsx.
+5 projects with funding caps. 2 are pre-filled (full) for cascade demo.
 
 ```js
-export const PROJECTS = [
-  {
-    id: "clean-water",
-    title: "Clean Water Initiative",
-    description: "Provide safe drinking water to 10 rural communities",
-    milestones: [
-      { id: "cw-1", title: "Purchase Water Filters", description: "Buy 500 portable water filters", xrpAmount: 100, order: 1 },
-      { id: "cw-2", title: "Distribution & Logistics", description: "Transport filters to 10 villages", xrpAmount: 75, order: 2 },
-      { id: "cw-3", title: "Community Training", description: "Train local volunteers on filter maintenance", xrpAmount: 50, order: 3 },
-    ],
-  },
-  {
-    id: "solar-school",
-    title: "Solar-Powered School",
-    description: "Install solar panels and equipment at a rural school",
-    milestones: [
-      { id: "ss-1", title: "Panel Procurement", description: "Purchase 20 solar panels + inverters", xrpAmount: 150, order: 1 },
-      { id: "ss-2", title: "Installation", description: "Install panels and wire classrooms", xrpAmount: 100, order: 2 },
-    ],
-  },
-  {
-    id: "medical-clinic",
-    title: "Mobile Medical Clinic",
-    description: "Fund a mobile clinic to serve underserved areas",
-    milestones: [
-      { id: "mc-1", title: "Vehicle & Equipment", description: "Purchase and outfit a medical van", xrpAmount: 200, order: 1 },
-      { id: "mc-2", title: "Staff Training", description: "Train 5 community health workers", xrpAmount: 80, order: 2 },
-      { id: "mc-3", title: "First Quarter Operations", description: "Cover fuel, supplies, and salaries for 3 months", xrpAmount: 120, order: 3 },
-    ],
-  },
-  {
-    id: "school-meals",
-    title: "School Meals Program",
-    description: "Provide daily meals to 200 students for one semester",
-    milestones: [
-      { id: "sm-1", title: "Kitchen Setup", description: "Build a school kitchen and purchase equipment", xrpAmount: 90, order: 1 },
-      { id: "sm-2", title: "Food Supply Contract", description: "Secure 6-month food supply agreement", xrpAmount: 110, order: 2 },
-    ],
-  },
-  {
-    id: "reforestation",
-    title: "Community Reforestation",
-    description: "Plant 10,000 native trees across deforested land",
-    milestones: [
-      { id: "rf-1", title: "Seedling Nursery", description: "Establish nursery and grow 10,000 seedlings", xrpAmount: 60, order: 1 },
-      { id: "rf-2", title: "Planting Campaign", description: "Organize community planting over 2 weekends", xrpAmount: 40, order: 2 },
-      { id: "rf-3", title: "Monitoring & Care", description: "6-month monitoring, replanting failures", xrpAmount: 50, order: 3 },
-    ],
-  },
-];
+{
+  id: "clean-water",
+  title: "Clean Water Initiative",
+  description: "Provide safe drinking water to 10 rural communities",
+  fundingGoal: 225,       // cap — once reached, new donors cascade past
+  currentFunded: 0,       // simulates other donors' contributions
+  milestones: [
+    { id: "cw-1", title: "Purchase Water Filters", xrpAmount: 100, order: 1 },
+    { id: "cw-2", title: "Distribution & Logistics", xrpAmount: 75, order: 2 },
+    { id: "cw-3", title: "Community Training", xrpAmount: 50, order: 3 },
+  ],
+}
+// Solar School: fundingGoal 250, currentFunded 250 (FULL)
+// Medical Clinic: fundingGoal 400, currentFunded 0
+// School Meals: fundingGoal 200, currentFunded 200 (FULL)
+// Reforestation: fundingGoal 150, currentFunded 0
 ```
 
-### Runtime state shape (managed in App.jsx by Paing)
-
-Projects the donor has selected and funded. Each milestone gets enriched with escrow + voting data:
+### Runtime state shape (managed in App.jsx)
 
 ```js
-// Shape of a funded project in React state
 {
-  ...PROJECTS[i],               // id, title, description
-  selected: true,               // donor picked this project
-  milestones: [
-    {
-      ...milestone,             // id, title, description, xrpAmount, order
-      status: "pending",        // pending | funded | voteable | approved | released | locked
-      escrowSequence: null,     // set after EscrowCreate
-      condition: null,          // hex string
-      fulfillment: null,        // hex string (secret — revealed on quorum)
-      escrowTxHash: null,
-      releaseTxHash: null,
-      approvals: {
-        ngoRep: false,
-        donorRep: false,
-        communityAuditor: false,
-      },
-    },
-    // ...
-  ],
+  ...project,                   // id, title, description, fundingGoal, currentFunded
+  rank: null,                   // 1, 2, or 3 (donor preference) — null = not ranked
+  funded: false,                // true after escrows created by this donor
+  milestones: [{
+    ...milestone,               // id, title, description, xrpAmount, order
+    status: "pending",          // pending | funded | voteable | approved | released
+    escrowSequence: null,
+    condition: null,            // hex
+    fulfillment: null,          // hex (secret — revealed on quorum)
+    escrowTxHash: null,
+    releaseTxHash: null,
+    approvals: { ngoRep: false, donorRep: false, communityAuditor: false },
+  }],
 }
 ```
 
 **Status transitions:**
-- `pending` → `funded`: after EscrowCreate succeeds for this milestone
-- `funded` → `voteable`: automatic if this is milestone #1, OR if the previous milestone is `released`
-- `voteable` → `approved`: after 2-of-3 approvals received
-- `approved` → `released`: after EscrowFinish succeeds (on-chain), then next milestone becomes `voteable`
-- `funded` stays as `locked` display state in UI if previous milestone isn't released yet
+- `pending` → `funded`: after EscrowCreate (milestone 1 becomes `voteable` instead)
+- `funded` → `voteable`: auto when predecessor is `released`
+- `voteable` → `approved`: 2-of-3 committee approvals
+- `approved` → `released`: EscrowFinish succeeds, next milestone auto-unlocks
 
-**Trickle-down rule:** A milestone is voteable only if `order === 1` OR the milestone with `order - 1` in the same project has status `released`.
+**Trickle-down rule:** voteable if `order === 1` OR predecessor in same project is `released`.
 
 ### wallets.js (Paing)
 ```js
@@ -435,33 +353,20 @@ getAccountNFTs(address)          // -> NFT[]
 generateCondition()              // -> { preimage, fulfillment, condition }
 ```
 
-### Donation flow (how the pieces connect):
-```jsx
-// In DonorPanel: when donor clicks "Fund Selected Projects"
-const handleFundSelected = async (selectedProjects) => {
-  // 1. Calculate total XRP across all selected projects' milestones
-  const totalXRP = selectedProjects.flatMap(p => p.milestones).reduce((sum, m) => sum + m.xrpAmount, 0);
-
-  // 2. Send total to fund account
-  await sendPayment({ wallet: donorWallet, destination: fundWallet.address, amount: totalXRP });
-
-  // 3. Create escrows for ALL milestones in selected projects
-  for (const project of selectedProjects) {
-    for (const milestone of project.milestones) {
-      const { condition, fulfillment } = await generateCondition();
-      const { result, sequence } = await createEscrow({
-        fromWallet: fundWallet,
-        destination: beneficiary,
-        amount: milestone.xrpAmount,
-        condition,
-      });
-      // Update state — milestone 1 becomes "voteable", others become "funded" (locked until predecessor releases)
-      updateMilestoneEscrow(project.id, milestone.id, {
-        escrowSequence: sequence, condition, fulfillment,
-        escrowTxHash: result?.result?.tx_json?.hash,
-      });
-    }
-  }
+### Donation flow with cascade (implemented in DonorPanel):
+```
+1. Donor ranks projects: 1st Solar School, 2nd Clean Water, 3rd Reforestation
+2. Clicks "Fund My Top Choices"
+3. CASCADE:
+   - Solar School: currentFunded 250/250 → SKIP (logged: "skipped — full")
+   - Clean Water: currentFunded 0/225 → FUND (logged: "funding — has capacity")
+   - Reforestation: currentFunded 0/150 → FUND
+4. Total XRP = 225 + 150 = 375
+5. sendPayment(375 XRP → fund account)
+6. For each fundable project, for each milestone:
+   - generateCondition() → createEscrow() → updateMilestoneEscrow()
+7. Milestone 1 of each project becomes "voteable", rest become "funded" (locked)
+```
 };
 ```
 
@@ -489,16 +394,19 @@ const handleFundSelected = async (selectedProjects) => {
 
 Everyone helps prep this Saturday. Nobody owns it alone.
 
-1. **"Here's the problem"** — NGO scandal headline. Donors have no visibility into where money goes.
-2. **Show the project catalog** — 5 projects, each with sequential milestones. "This nonprofit is transparent about what they need."
-3. **Donor picks 2 projects** — "Clean Water" and "Solar School". Checks the boxes, clicks "Fund Selected".
-4. **Escrows created on-chain** — watch progress: "Creating escrows... 3/5... 5/5 done!" All milestones locked.
-5. **Show testnet explorer** — 5 separate EscrowCreate txs. Real money locked, publicly visible.
-6. **The trickle-down** — "Milestone 2 is locked. The committee can only vote on Milestone 1 first. Funds don't flow until impact is proven."
-7. **Committee votes on Clean Water M1** — NGO Rep + Donor Rep approve. EscrowFinish fires. 100 XRP released.
-8. **Milestone 2 unlocks** — "Now the committee can review Distribution. The nonprofit earned the right to the next tranche."
-9. **Proof-of-Impact NFT** — appears in donor's portfolio with the milestone name, amount, and tx hashes. Verifiable on-chain.
-10. **Closing** — "Donors choose their impact. Funds only flow when milestones deliver. Every receipt on-chain."
+1. **"Here's the problem"** — NGO scandal headline. Donors have no visibility.
+2. **Show the catalog** — 5 projects with funding progress bars. 2 already full. "This nonprofit is transparent."
+3. **Donor ranks 3 projects** — 1st Solar School (full!), 2nd Clean Water, 3rd Reforestation
+4. **Click "Fund My Top Choices"** — cascade log appears:
+   - "Solar School — skipped (full 250/250)"
+   - "Clean Water — funding (0/225)"
+   - "Reforestation — funding (0/150)"
+5. **Escrows created** — "Creating escrows... 3/6... 6/6 done!" All milestones locked on-chain.
+6. **Show testnet explorer** — 6 EscrowCreate txs. Real money locked, publicly visible.
+7. **The trickle-down** — "Milestone 2 is locked. Committee can only vote on M1 first."
+8. **Committee votes on Clean Water M1** — 2-of-3 approve. EscrowFinish fires. 100 XRP released. M2 unlocks.
+9. **"The nonprofit earned the right to the next tranche"** — show M2 now voteable.
+10. **Closing** — "Donors rank their priorities. Full projects cascade. Funds trickle down only when milestones deliver."
 
 ---
 
