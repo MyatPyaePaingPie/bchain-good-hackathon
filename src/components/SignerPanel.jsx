@@ -40,6 +40,7 @@ export default function SignerPanel({
 }) {
   const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [releasingMilestoneId, setReleasingMilestoneId] = useState(null);
+  const [attemptedReleaseKeys, setAttemptedReleaseKeys] = useState([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -55,6 +56,84 @@ export default function SignerPanel({
     [fundedProjects, selectedProjectId]
   );
 
+  function getReleaseKey(projectId, milestoneId) {
+    return `${projectId}:${milestoneId}`;
+  }
+
+  async function releaseMilestone(project, milestone, { manual = false } = {}) {
+    const releaseKey = getReleaseKey(project.id, milestone.id);
+
+    try {
+      setError("");
+      setMessage(`Releasing ${milestone.title} — submitting EscrowFinish...`);
+      setReleasingMilestoneId(milestone.id);
+      setAttemptedReleaseKeys((prev) =>
+        prev.includes(releaseKey) ? prev : [...prev, releaseKey]
+      );
+
+      const result = await finishEscrow({
+        ownerAddress: wallets.fund.address,
+        escrowSequence: milestone.escrowSequence,
+        condition: milestone.condition,
+        fulfillment: milestone.fulfillment,
+        wallet: wallets.fund,
+      });
+
+      const releaseTxHash =
+        result?.result?.hash ||
+        result?.result?.tx_json?.hash ||
+        result?.result?.tx_json?.tx_json?.hash ||
+        null;
+
+      updateMilestoneReleased(project.id, milestone.id, releaseTxHash);
+
+      // Mint Proof-of-Impact NFT
+      setMessage(`${milestone.title} released! Minting Proof-of-Impact NFT...`);
+      try {
+        const approvedBy = COMMITTEE_MEMBERS
+          .filter((member) => milestone.approvals[member.key])
+          .map((member) => member.label);
+        const tokenId = await mintImpactNFT({
+          wallet: wallets.fund,
+          milestone: { id: milestone.id, title: milestone.title },
+          xrpAmount: milestone.xrpAmount,
+          beneficiary: wallets?.beneficiary?.address || "unknown",
+          escrowTxHash: milestone.escrowTxHash || "",
+          releaseTxHash: releaseTxHash || "",
+          approvedBy,
+        });
+        addMintedNFT?.({
+          NFTokenID: tokenId,
+          metadata: {
+            t: "poi",
+            mid: milestone.id,
+            xrp: milestone.xrpAmount,
+            to: wallets?.beneficiary?.address || "unknown",
+            esc: milestone.escrowTxHash || "",
+            rel: releaseTxHash || "",
+          },
+        });
+        setMessage(`${milestone.title} released + Impact NFT minted! Next milestone unlocked.`);
+      } catch (nftErr) {
+        console.error("Impact NFT mint failed:", nftErr);
+        setMessage(`${milestone.title} released! (NFT mint failed — non-fatal)`);
+      }
+
+      if (manual) {
+        setError("");
+      }
+    } catch (releaseError) {
+      console.error("EscrowFinish failed:", releaseError);
+      setError(
+        `EscrowFinish failed for ${milestone.title}: ${
+          releaseError.message || "Unknown error"
+        }. Automatic retry is paused; use Retry Release to try again.`
+      );
+    } finally {
+      setReleasingMilestoneId(null);
+    }
+  }
+
   // Auto-release when a milestone hits "approved" status
   useEffect(() => {
     if (!selectedProject) return;
@@ -64,70 +143,11 @@ export default function SignerPanel({
     );
     if (!approvedMilestone || releasingMilestoneId === approvedMilestone.id) return;
 
-    let cancelled = false;
+    const releaseKey = getReleaseKey(selectedProject.id, approvedMilestone.id);
+    if (attemptedReleaseKeys.includes(releaseKey)) return;
 
-    async function releaseEscrow() {
-      try {
-        setError("");
-        setMessage(`Releasing ${approvedMilestone.title} — submitting EscrowFinish...`);
-        setReleasingMilestoneId(approvedMilestone.id);
-
-        const result = await finishEscrow({
-          ownerAddress: wallets.fund.address,
-          escrowSequence: approvedMilestone.escrowSequence,
-          condition: approvedMilestone.condition,
-          fulfillment: approvedMilestone.fulfillment,
-          wallet: wallets.fund,
-        });
-
-        if (cancelled) return;
-
-        const releaseTxHash = result?.result?.tx_json?.hash || null;
-        updateMilestoneReleased(selectedProject.id, approvedMilestone.id, releaseTxHash);
-
-        // Mint Proof-of-Impact NFT
-        setMessage(`${approvedMilestone.title} released! Minting Proof-of-Impact NFT...`);
-        try {
-          const approvedBy = COMMITTEE_MEMBERS
-            .filter((m) => approvedMilestone.approvals[m.key])
-            .map((m) => m.label);
-          const tokenId = await mintImpactNFT({
-            wallet: wallets.fund,
-            milestone: { id: approvedMilestone.id, title: approvedMilestone.title },
-            xrpAmount: approvedMilestone.xrpAmount,
-            beneficiary: wallets?.beneficiary?.address || "unknown",
-            escrowTxHash: approvedMilestone.escrowTxHash || "",
-            releaseTxHash: releaseTxHash || "",
-            approvedBy,
-          });
-          addMintedNFT?.({
-            NFTokenID: tokenId,
-            metadata: {
-              t: "poi",
-              mid: approvedMilestone.id,
-              xrp: approvedMilestone.xrpAmount,
-              to: wallets?.beneficiary?.address || "unknown",
-              esc: approvedMilestone.escrowTxHash || "",
-              rel: releaseTxHash || "",
-            },
-          });
-          setMessage(`${approvedMilestone.title} released + Impact NFT minted! Next milestone unlocked.`);
-        } catch (nftErr) {
-          console.error("Impact NFT mint failed:", nftErr);
-          setMessage(`${approvedMilestone.title} released! (NFT mint failed — non-fatal)`);
-        }
-      } catch (releaseError) {
-        if (cancelled) return;
-        console.error("EscrowFinish failed:", releaseError);
-        setError("EscrowFinish failed: " + (releaseError.message || "Unknown error"));
-      } finally {
-        if (!cancelled) setReleasingMilestoneId(null);
-      }
-    }
-
-    releaseEscrow();
-    return () => { cancelled = true; };
-  }, [selectedProject, releasingMilestoneId, updateMilestoneReleased, wallets]);
+    void releaseMilestone(selectedProject, approvedMilestone);
+  }, [selectedProject, releasingMilestoneId, attemptedReleaseKeys, wallets]);
 
   function handleToggle(milestoneId, role) {
     if (!selectedProject) return;
@@ -211,6 +231,8 @@ export default function SignerPanel({
               const isVoteable = effective === "voteable";
               const isLocked = effective === "funded";
               const isReleasing = releasingMilestoneId === m.id;
+              const canRetryRelease =
+                effective === "approved" && !isReleasing;
 
               return (
                 <div
@@ -286,6 +308,16 @@ export default function SignerPanel({
 
                   {effective === "released" && (
                     <p className="text-sm text-green-600 font-medium mt-2">Released on-chain</p>
+                  )}
+
+                  {canRetryRelease && (
+                    <button
+                      type="button"
+                      onClick={() => void releaseMilestone(selectedProject, m, { manual: true })}
+                      className="mt-3 rounded-lg bg-amber-500 px-3 py-2 text-sm font-medium text-white transition hover:bg-amber-600"
+                    >
+                      Retry Release
+                    </button>
                   )}
                 </div>
               );
