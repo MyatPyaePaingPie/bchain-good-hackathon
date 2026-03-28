@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { finishEscrow } from "../xrpl/escrow";
+import { mintImpactNFT } from "../xrpl/nft";
 import { getEffectiveStatus } from "../App.jsx";
 
 const COMMITTEE_MEMBERS = [
@@ -82,7 +83,27 @@ export default function SignerPanel({
 
         const releaseTxHash = result?.result?.tx_json?.hash || null;
         updateMilestoneReleased(selectedProject.id, approvedMilestone.id, releaseTxHash);
-        setMessage(`${approvedMilestone.title} released! Next milestone unlocked.`);
+
+        // Mint Proof-of-Impact NFT
+        setMessage(`${approvedMilestone.title} released! Minting Proof-of-Impact NFT...`);
+        try {
+          const approvedBy = COMMITTEE_MEMBERS
+            .filter((m) => approvedMilestone.approvals[m.key])
+            .map((m) => m.label);
+          await mintImpactNFT({
+            wallet: wallets.fund,
+            milestone: { id: approvedMilestone.id, title: approvedMilestone.title },
+            xrpAmount: approvedMilestone.xrpAmount,
+            beneficiary: wallets?.beneficiary?.address || "unknown",
+            escrowTxHash: approvedMilestone.escrowTxHash || "",
+            releaseTxHash: releaseTxHash || "",
+            approvedBy,
+          });
+          setMessage(`${approvedMilestone.title} released + Impact NFT minted! Next milestone unlocked.`);
+        } catch (nftErr) {
+          console.error("Impact NFT mint failed:", nftErr);
+          setMessage(`${approvedMilestone.title} released! (NFT mint failed — non-fatal)`);
+        }
       } catch (releaseError) {
         if (cancelled) return;
         console.error("EscrowFinish failed:", releaseError);

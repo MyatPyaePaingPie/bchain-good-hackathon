@@ -3,6 +3,7 @@ import { Wallet, Gift, CheckCircle2, Loader2, Award, ChevronRight } from "lucide
 import { sendPayment, getBalance } from "../xrpl/client";
 import { createEscrow } from "../xrpl/escrow";
 import { generateCondition } from "../xrpl/condition";
+import { mintDonationNFT } from "../xrpl/nft";
 
 const RANK_COLORS = {
   1: "bg-amber-500",
@@ -109,8 +110,22 @@ export default function DonorPanel({
         markProjectFunded(project.id);
       }
 
+      // Mint Proof-of-Donation NFT
+      setStatus("Minting Proof-of-Donation NFT...");
+      try {
+        await mintDonationNFT({
+          wallet: wallets.fund,
+          donor: wallets.donor.address,
+          totalXRP,
+          milestoneCount: count,
+        });
+      } catch (nftErr) {
+        console.error("Donation NFT mint failed:", nftErr);
+        // Non-fatal — escrows are already created
+      }
+
       refreshBalances();
-      setStatus(`Done! Funded ${projectsToFund.length} project${projectsToFund.length > 1 ? "s" : ""} (${count} escrows).`);
+      setStatus(`Done! Funded ${projectsToFund.length} project${projectsToFund.length > 1 ? "s" : ""} (${count} escrows + donation NFT).`);
     } catch (err) {
       setStatus("Error: " + err.message);
     } finally {
