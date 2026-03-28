@@ -3,6 +3,7 @@ import "./app.css";
 import { WALLETS } from "./data/wallets.js";
 import { PROJECTS } from "./data/projects.js";
 import { getBalance, disconnect } from "./xrpl/client.js";
+import { getProjects } from "./lib/projects.js";
 import DonorPanel from "./components/DonorPanel.jsx";
 import SignerPanel from "./components/SignerPanel.jsx";
 import MilestoneBoard from "./components/MilestoneBoard.jsx";
@@ -21,14 +22,23 @@ const TABS = [
 function initMilestoneState(m, isFirst) {
   return {
     ...m,
-    status: "pending", // pending | funded | voteable | approved | released
-    escrowSequence: null,
-    condition: null,
-    fulfillment: null,
-    escrowTxHash: null,
-    releaseTxHash: null,
-    approvals: { ngoRep: false, donorRep: false, communityAuditor: false },
+    status: m.status ?? "pending", // pending | funded | voteable | approved | released
+    escrowSequence: m.escrowSequence ?? null,
+    condition: m.condition ?? null,
+    fulfillment: m.fulfillment ?? null,
+    escrowTxHash: m.escrowTxHash ?? null,
+    releaseTxHash: m.releaseTxHash ?? null,
+    approvals: m.approvals ?? { ngoRep: false, donorRep: false, communityAuditor: false },
   };
+}
+
+function buildProjectState(projectDefs) {
+  return projectDefs.map((p) => ({
+    ...p,
+    rank: p.rank ?? null,
+    funded: p.funded ?? false,
+    milestones: p.milestones.map((m, i) => initMilestoneState(m, i === 0)),
+  }));
 }
 
 /** Determine the effective display status of a milestone based on trickle-down gating */
@@ -53,14 +63,7 @@ export default function App() {
   const [balances, setBalances] = useState({ donor: null, fund: null, beneficiary: null });
 
   // Projects state: full catalog with ranking + funded state
-  const [projects, setProjects] = useState(() =>
-    PROJECTS.map((p) => ({
-      ...p,
-      rank: null, // 1, 2, or 3 (donor preference order) — null = not selected
-      funded: false,
-      milestones: p.milestones.map((m, i) => initMilestoneState(m, i === 0)),
-    }))
-  );
+  const [projects, setProjects] = useState(() => buildProjectState(PROJECTS));
 
   // Derived
   const fundedProjects = projects.filter((p) => p.funded);
@@ -88,6 +91,30 @@ export default function App() {
       disconnect();
     };
   }, [refreshBalances]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadProjects() {
+      try {
+        const dbProjects = await getProjects();
+        if (!cancelled) {
+          setProjects(buildProjectState(dbProjects));
+        }
+      } catch (err) {
+        console.error("Failed to load projects from Supabase, using local seed data:", err);
+        if (!cancelled) {
+          setProjects(buildProjectState(PROJECTS));
+        }
+      }
+    }
+
+    loadProjects();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // --- State updaters ---
 
