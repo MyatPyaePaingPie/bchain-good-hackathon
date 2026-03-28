@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Wallet, Gift, CheckCircle2, Loader2, Award, ChevronRight } from "lucide-react";
+import { Wallet, Gift, CheckCircle2, Loader2, Award, ChevronRight, FileText, X } from "lucide-react";
 import { sendPayment, getBalance } from "../xrpl/client";
 import { createEscrow } from "../xrpl/escrow";
 import { generateCondition } from "../xrpl/condition";
@@ -30,6 +30,8 @@ export default function DonorPanel({
   const [cascadeLog, setCascadeLog] = useState([]);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [loading, setLoading] = useState(false);
+  const [contractOpen, setContractOpen] = useState(false);
+  const [contractAccepted, setContractAccepted] = useState(false);
 
   useEffect(() => {
     const fetch = async () => {
@@ -275,11 +277,75 @@ export default function DonorPanel({
         </div>
       </div>
 
+      {/* Contract Review Modal */}
+      {contractOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col">
+            <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <FileText size={20} className="text-blue-600" />
+                <h3 className="font-semibold text-gray-900">Donor Contribution Agreement</h3>
+              </div>
+              <button onClick={() => setContractOpen(false)} className="p-1 hover:bg-gray-100 rounded-lg">
+                <X size={20} className="text-gray-400" />
+              </button>
+            </div>
+            <div className="overflow-y-auto px-6 py-4 text-sm text-gray-700 space-y-3 flex-1">
+              <p className="font-semibold text-gray-900">GiveWithProof Donor Contribution Agreement with Grant Advisory Terms</p>
+              <p>By proceeding, you acknowledge and agree to the following key terms:</p>
+              <div className="space-y-2 text-xs text-gray-600">
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <p className="font-semibold text-gray-800 mb-1">1. Irrevocability</p>
+                  <p>All contributions are irrevocable. Once submitted, you retain no legal right to request return of contributed assets.</p>
+                </div>
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <p className="font-semibold text-gray-800 mb-1">2. No Direct Control</p>
+                  <p>Your project selections are non-binding recommendations. The Sponsor retains exclusive legal control and final discretion over all grants.</p>
+                </div>
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <p className="font-semibold text-gray-800 mb-1">3. Milestone-Based Disbursement</p>
+                  <p>Funds are locked in XRPL escrows per milestone. A committee of 3 must approve (2-of-3) before each milestone releases. Subsequent milestones only unlock after prior milestones are verified.</p>
+                </div>
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <p className="font-semibold text-gray-800 mb-1">4. Cascade Funding</p>
+                  <p>If your top-ranked project is fully funded, your contribution automatically cascades to your next preference.</p>
+                </div>
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <p className="font-semibold text-gray-800 mb-1">5. On-Chain Transparency</p>
+                  <p>All escrow transactions, releases, and Proof-of-Impact NFTs are recorded on the XRP Ledger and publicly verifiable.</p>
+                </div>
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <p className="font-semibold text-gray-800 mb-1">6. Timeout Protection</p>
+                  <p>If a milestone is not approved within 30 days, the escrow can be cancelled and funds returned to the fund account.</p>
+                </div>
+              </div>
+              <p className="text-xs text-gray-400 pt-2">
+                Full legal text: GiveWithProof Donor Contribution Agreement with Grant Advisory Terms.pdf
+              </p>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex gap-3">
+              <button
+                onClick={() => setContractOpen(false)}
+                className="flex-1 py-3 rounded-xl border border-gray-300 text-gray-600 font-medium hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { setContractAccepted(true); setContractOpen(false); }}
+                className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700"
+              >
+                I Agree to These Terms
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Fund Button + Cascade Preview */}
       {rankedCount > 0 && (
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">Your ranked preferences</p>
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex items-center gap-2 mb-4 flex-wrap">
             {rankedProjects.map((p, i) => {
               const isFull = p.currentFunded >= p.fundingGoal;
               return (
@@ -296,16 +362,34 @@ export default function DonorPanel({
             })}
           </div>
 
-          <button
-            onClick={handleFund}
-            disabled={loading}
-            className={`w-full py-4 rounded-xl font-bold text-lg flex justify-center items-center gap-3 transition-all ${
-              loading ? "bg-gray-100 text-gray-400" : "bg-blue-600 text-white hover:bg-blue-700 shadow-md active:scale-[0.98]"
-            }`}
-          >
-            {loading ? <Loader2 className="animate-spin" size={20} /> : <CheckCircle2 size={20} />}
-            {loading ? `Creating escrows... ${progress.current}/${progress.total}` : "Fund My Top Choices"}
-          </button>
+          {/* Contract acceptance gate */}
+          {!contractAccepted ? (
+            <button
+              onClick={() => setContractOpen(true)}
+              className="w-full py-4 rounded-xl font-bold text-lg flex justify-center items-center gap-3 bg-amber-500 text-white hover:bg-amber-600 shadow-md active:scale-[0.98] transition-all"
+            >
+              <FileText size={20} />
+              Review & Accept Donor Agreement
+            </button>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 mb-3 text-xs text-green-700 bg-green-50 px-3 py-2 rounded-lg">
+                <CheckCircle2 size={14} />
+                <span>Donor Contribution Agreement accepted</span>
+                <button onClick={() => setContractOpen(true)} className="ml-auto text-green-600 hover:underline">review</button>
+              </div>
+              <button
+                onClick={handleFund}
+                disabled={loading}
+                className={`w-full py-4 rounded-xl font-bold text-lg flex justify-center items-center gap-3 transition-all ${
+                  loading ? "bg-gray-100 text-gray-400" : "bg-blue-600 text-white hover:bg-blue-700 shadow-md active:scale-[0.98]"
+                }`}
+              >
+                {loading ? <Loader2 className="animate-spin" size={20} /> : <CheckCircle2 size={20} />}
+                {loading ? `Creating escrows... ${progress.current}/${progress.total}` : "Fund My Top Choices"}
+              </button>
+            </>
+          )}
 
           {/* Cascade log */}
           {cascadeLog.length > 0 && (
