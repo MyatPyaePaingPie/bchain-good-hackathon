@@ -159,11 +159,13 @@ export default function DonorPanel({
             return (
               <button
                 key={project.id}
-                onClick={() => !isFunded && toggleProjectRank(project.id)}
-                disabled={isFunded || loading}
+                onClick={() => !isFunded && !isFull && toggleProjectRank(project.id)}
+                disabled={isFunded || isFull || loading}
                 className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
                   isFunded
                     ? "border-green-200 bg-green-50 opacity-75"
+                    : isFull
+                    ? "border-red-200 bg-red-50 opacity-75"
                     : rank !== null
                     ? "border-blue-500 bg-blue-50 shadow-sm"
                     : "border-gray-200 bg-white hover:border-gray-300"
@@ -207,6 +209,10 @@ export default function DonorPanel({
                     ) : isFunded ? (
                       <div className="w-8 h-8 rounded-full bg-green-500 text-white flex items-center justify-center">
                         <CheckCircle2 size={16} />
+                      </div>
+                    ) : isFull ? (
+                      <div className="w-8 h-8 rounded-full bg-red-100 text-red-500 flex items-center justify-center text-xs font-bold">
+                        Full
                       </div>
                     ) : (
                       <div className="w-8 h-8 rounded-full border-2 border-gray-300" />

@@ -93,7 +93,8 @@ export default function App() {
   const toggleProjectRank = useCallback((projectId) => {
     setProjects((prev) => {
       const project = prev.find((p) => p.id === projectId);
-      if (!project || project.funded) return prev;
+      const isFull = project ? project.currentFunded >= project.fundingGoal : false;
+      if (!project || project.funded || isFull) return prev;
 
       // If already ranked, remove and re-pack ranks
       if (project.rank !== null) {
