@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import "./app.css";
 import { WALLETS } from "./data/wallets.js";
-import { MILESTONES } from "./data/milestones.js";
+import { PROJECTS } from "./data/projects.js";
 import { getBalance, disconnect } from "./xrpl/client.js";
 import DonorPanel from "./components/DonorPanel.jsx";
 import SignerPanel from "./components/SignerPanel.jsx";
@@ -15,29 +15,55 @@ const TABS = [
   { id: "dashboard", label: "Dashboard" },
 ];
 
-function buildMilestoneState(defs) {
-  return defs.map((m) => ({
+/** Enrich a raw milestone definition with runtime state fields */
+function initMilestoneState(m, isFirst) {
+  return {
     ...m,
-    status: "pending", // pending | funded | approved | released
+    status: "pending", // pending | funded | voteable | approved | released
     escrowSequence: null,
     condition: null,
     fulfillment: null,
     escrowTxHash: null,
     releaseTxHash: null,
-    approvals: {
-      ngoRep: false,
-      donorRep: false,
-      communityAuditor: false,
-    },
-  }));
+    approvals: { ngoRep: false, donorRep: false, communityAuditor: false },
+  };
+}
+
+/** Determine the effective display status of a milestone based on trickle-down gating */
+export function getEffectiveStatus(milestone, allMilestonesInProject) {
+  // If pending or released/approved, return as-is
+  if (milestone.status === "pending" || milestone.status === "released") return milestone.status;
+  if (milestone.status === "approved") return "approved";
+
+  // For funded milestones, check if they're voteable (trickle-down)
+  if (milestone.status === "funded" || milestone.status === "voteable") {
+    if (milestone.order === 1) return "voteable";
+    const predecessor = allMilestonesInProject.find((m) => m.order === milestone.order - 1);
+    if (predecessor && predecessor.status === "released") return "voteable";
+    return "funded"; // locked — predecessor not released yet
+  }
+
+  return milestone.status;
 }
 
 export default function App() {
   const [activeTab, setActiveTab] = useState("donor");
-  const [milestones, setMilestones] = useState(() => buildMilestoneState(MILESTONES));
   const [balances, setBalances] = useState({ donor: null, fund: null, beneficiary: null });
 
-  // Fetch balances periodically
+  // Projects state: full catalog with selection + funded state
+  const [projects, setProjects] = useState(() =>
+    PROJECTS.map((p) => ({
+      ...p,
+      selected: false,
+      funded: false,
+      milestones: p.milestones.map((m, i) => initMilestoneState(m, i === 0)),
+    }))
+  );
+
+  // Derived: only funded projects (for committee/milestone/dashboard tabs)
+  const fundedProjects = projects.filter((p) => p.funded);
+
+  // Balance polling
   const refreshBalances = useCallback(async () => {
     try {
       const [donor, fund, beneficiary] = await Promise.all([
@@ -60,50 +86,107 @@ export default function App() {
     };
   }, [refreshBalances]);
 
-  // --- State updaters passed down to child components ---
+  // --- State updaters ---
 
-  /** After EscrowCreate succeeds for a milestone */
-  const updateMilestoneEscrow = useCallback((milestoneId, { escrowSequence, condition, fulfillment, escrowTxHash }) => {
-    setMilestones((prev) =>
-      prev.map((m) =>
-        m.id === milestoneId
-          ? { ...m, status: "funded", escrowSequence, condition, fulfillment, escrowTxHash }
-          : m
-      )
+  /** Toggle project selection (donor browsing) */
+  const toggleProjectSelection = useCallback((projectId) => {
+    setProjects((prev) => {
+      const project = prev.find((p) => p.id === projectId);
+      if (!project) return prev;
+
+      // If already selected, deselect
+      if (project.selected) {
+        return prev.map((p) => (p.id === projectId ? { ...p, selected: false } : p));
+      }
+
+      // Enforce max 3 selections
+      const selectedCount = prev.filter((p) => p.selected).length;
+      if (selectedCount >= 3) return prev;
+
+      return prev.map((p) => (p.id === projectId ? { ...p, selected: true } : p));
+    });
+  }, []);
+
+  /** Mark selected projects as funded (after escrows created) */
+  const markProjectFunded = useCallback((projectId) => {
+    setProjects((prev) =>
+      prev.map((p) => (p.id === projectId ? { ...p, funded: true } : p))
     );
   }, []);
 
-  /** When a committee member approves a milestone */
-  const updateMilestoneApproval = useCallback((milestoneId, role, approved) => {
-    setMilestones((prev) =>
-      prev.map((m) => {
-        if (m.id !== milestoneId) return m;
-        const newApprovals = { ...m.approvals, [role]: approved };
-        const approvalCount = Object.values(newApprovals).filter(Boolean).length;
+  /** After EscrowCreate succeeds for a milestone */
+  const updateMilestoneEscrow = useCallback((projectId, milestoneId, { escrowSequence, condition, fulfillment, escrowTxHash }) => {
+    setProjects((prev) =>
+      prev.map((p) => {
+        if (p.id !== projectId) return p;
         return {
-          ...m,
-          approvals: newApprovals,
-          status: approvalCount >= 2 && m.status === "funded" ? "approved" : m.status,
+          ...p,
+          milestones: p.milestones.map((m) => {
+            if (m.id !== milestoneId) return m;
+            // First milestone becomes voteable, others become funded (locked)
+            const status = m.order === 1 ? "voteable" : "funded";
+            return { ...m, status, escrowSequence, condition, fulfillment, escrowTxHash };
+          }),
         };
       })
     );
   }, []);
 
-  /** After EscrowFinish succeeds for a milestone */
-  const updateMilestoneReleased = useCallback((milestoneId, releaseTxHash) => {
-    setMilestones((prev) =>
-      prev.map((m) =>
-        m.id === milestoneId ? { ...m, status: "released", releaseTxHash } : m
-      )
+  /** When a committee member approves a milestone */
+  const updateMilestoneApproval = useCallback((projectId, milestoneId, role, approved) => {
+    setProjects((prev) =>
+      prev.map((p) => {
+        if (p.id !== projectId) return p;
+        return {
+          ...p,
+          milestones: p.milestones.map((m) => {
+            if (m.id !== milestoneId) return m;
+            const newApprovals = { ...m.approvals, [role]: approved };
+            const approvalCount = Object.values(newApprovals).filter(Boolean).length;
+            const effectiveStatus = getEffectiveStatus(m, p.milestones);
+            return {
+              ...m,
+              approvals: newApprovals,
+              status: approvalCount >= 2 && effectiveStatus === "voteable" ? "approved" : m.status,
+            };
+          }),
+        };
+      })
+    );
+  }, []);
+
+  /** After EscrowFinish succeeds — release milestone and unlock next in sequence */
+  const updateMilestoneReleased = useCallback((projectId, milestoneId, releaseTxHash) => {
+    setProjects((prev) =>
+      prev.map((p) => {
+        if (p.id !== projectId) return p;
+        const releasedOrder = p.milestones.find((m) => m.id === milestoneId)?.order;
+        return {
+          ...p,
+          milestones: p.milestones.map((m) => {
+            // Release the approved milestone
+            if (m.id === milestoneId) {
+              return { ...m, status: "released", releaseTxHash };
+            }
+            // Unlock next milestone in sequence (trickle-down)
+            if (m.order === releasedOrder + 1 && m.status === "funded") {
+              return { ...m, status: "voteable" };
+            }
+            return m;
+          }),
+        };
+      })
     );
     refreshBalances();
   }, [refreshBalances]);
 
-  // Props bundle for child components
   const sharedProps = {
-    milestones,
+    projects,
+    fundedProjects,
     wallets: WALLETS,
     balances,
+    toggleProjectSelection,
+    markProjectFunded,
     updateMilestoneEscrow,
     updateMilestoneApproval,
     updateMilestoneReleased,
@@ -112,15 +195,13 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white border-b border-gray-200">
         <div className="max-w-5xl mx-auto px-4 py-4">
           <h1 className="text-2xl font-bold text-gray-900">Nonprofit Escrow</h1>
-          <p className="text-sm text-gray-500">Transparent fund management on XRPL</p>
+          <p className="text-sm text-gray-500">Transparent fund management on XRPL — choose your impact</p>
         </div>
       </header>
 
-      {/* Tab Navigation */}
       <nav className="bg-white border-b border-gray-200">
         <div className="max-w-5xl mx-auto px-4 flex gap-1">
           {TABS.map((tab) => (
@@ -139,7 +220,6 @@ export default function App() {
         </div>
       </nav>
 
-      {/* Panel Content */}
       <main className="max-w-5xl mx-auto px-4 py-6">
         {activeTab === "donor" && <DonorPanel {...sharedProps} />}
         {activeTab === "committee" && <SignerPanel {...sharedProps} />}
