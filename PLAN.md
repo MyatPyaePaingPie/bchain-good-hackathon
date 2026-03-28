@@ -309,7 +309,12 @@ const handleDonate = async () => {
 ## Technical Gotchas (everyone should know)
 
 1. **No backend.** All transactions happen in-browser via xrpl.js -> XRPL testnet WebSocket. Wallet seeds are in the frontend. This is fine for testnet demos.
-2. **Crypto-conditions:** SHA-256 preimage/fulfillment pairs generated with Web Crypto API (browser-native). NOT the `five-bells-condition` npm package (that's Node-only).
+2. **Crypto-conditions (CRITICAL — Angelina read this):**
+   - Use Web Crypto API (browser-native). NOT `five-bells-condition` (Node-only).
+   - **Fulfillment DER** (36 bytes for 32-byte preimage): `A0 22 80 20 <preimage>`
+   - **Fingerprint** = SHA-256 of the **raw preimage** (NOT the DER fulfillment)
+   - **Condition DER** (39 bytes): `A0 25 80 20 <fingerprint> 81 01 20`
+   - The inner `80 20` tag in the fulfillment is required — without it, EscrowFinish fails with `tecCRYPTOCONDITION_ERROR`.
 3. **Ripple Epoch:** XRPL timestamps = UNIX timestamp minus `946684800`. Must use this for `CancelAfter`.
 4. **NFT URI:** Must be hex-encoded string. `NFTokenTaxon` is required (use `0`).
 5. **EscrowFinish fee:** Conditional escrows cost more: `330 drops + 10 drops per 16 bytes of fulfillment`.
