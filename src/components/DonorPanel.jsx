@@ -319,9 +319,15 @@ export default function DonorPanel({
                   <p>If a milestone is not approved within 30 days, the escrow can be cancelled and funds returned to the fund account.</p>
                 </div>
               </div>
-              <p className="text-xs text-gray-400 pt-2">
-                Full legal text: GiveWithProof Donor Contribution Agreement with Grant Advisory Terms.pdf
-              </p>
+              <a
+                href="/donor-agreement.pdf"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 mt-2 px-4 py-2 rounded-lg bg-blue-50 text-blue-700 text-xs font-medium hover:bg-blue-100 transition-colors"
+              >
+                <FileText size={14} />
+                Read Full Legal Agreement (PDF)
+              </a>
             </div>
             <div className="px-6 py-4 border-t border-gray-200 flex gap-3">
               <button
