@@ -32,7 +32,7 @@ export default function DonorPanel({
   const [loading, setLoading] = useState(false);
   const [contractOpen, setContractOpen] = useState(false);
   const [contractAccepted, setContractAccepted] = useState(false);
-  const [donationAmount, setDonationAmount] = useState(100); // Default to 100 XRP
+  const [donationAmount, setDonationAmount] = useState("");
 
   useEffect(() => {
     const fetch = async () => {
@@ -45,13 +45,17 @@ export default function DonorPanel({
 
   const fundedProjects = projects.filter((p) => p.funded);
 
+  const parsedAmount = parseFloat(donationAmount) || 0;
+  const parsedBalance = parseFloat(balance) || 0;
+  const canFund = contractAccepted && parsedAmount > 0 && parsedAmount <= parsedBalance && rankedProjects.length > 0;
+
   const handleFund = async () => {
-    if (rankedProjects.length === 0) return;
+    if (!canFund) return;
     setLoading(true);
     setCascadeLog([]);
 
     try {
-      let remainingBudget = parseFloat(donationAmount);
+      let remainingBudget = parsedAmount;
       const milestonesToCreate = [];
       const projectsToFundSet = new Set(); // To track unique projects for markProjectFunded
 
@@ -400,36 +404,49 @@ export default function DonorPanel({
                 <span>Donor Contribution Agreement accepted</span>
                 <button onClick={() => setContractOpen(true)} className="ml-auto text-green-600 hover:underline">review</button>
               </div>
-              <button
-                onClick={handleFund}
-                disabled={loading}
-                className={`w-full py-4 rounded-xl font-bold text-lg flex justify-center items-center gap-3 transition-all ${
-                  loading ? "bg-gray-100 text-gray-400" : "bg-blue-600 text-white hover:bg-blue-700 shadow-md active:scale-[0.98]"
-                }`}
-              >
-                {loading ? <Loader2 className="animate-spin" size={20} /> : <CheckCircle2 size={20} />}
-                <div className="mb-6 p-4 bg-blue-50/50 rounded-xl border border-blue-100">
+
+              {/* Donation amount input */}
+              <div className="mb-4 p-4 bg-blue-50/50 rounded-xl border border-blue-100">
                 <label className="block text-sm font-semibold text-blue-900 mb-2">
                   How much would you like to contribute?
                 </label>
                 <div className="relative">
                   <input
                     type="number"
+                    min="0"
+                    max={parsedBalance}
                     value={donationAmount}
                     onChange={(e) => setDonationAmount(e.target.value)}
+                    disabled={loading}
                     className="w-full pl-4 pr-16 py-3 rounded-lg border-2 border-blue-200 focus:border-blue-500 outline-none text-xl font-bold text-blue-900"
-                    placeholder="0.00"
+                    placeholder="Enter amount"
                   />
                   <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-blue-400">
                     XRP
                   </span>
                 </div>
-                <p className="mt-2 text-xs text-blue-600">
-                  Your donation will fund as many milestones as possible in your ranked order. 
-                  Remaining: <span className="font-mono">{(balance - donationAmount).toFixed(2)} XRP</span>
-                </p>
+                <div className="mt-2 flex justify-between text-xs">
+                  <span className="text-blue-600">
+                    Funds as many milestones as possible in ranked order.
+                  </span>
+                  <span className={`font-mono ${parsedAmount > parsedBalance ? "text-red-600 font-semibold" : "text-blue-600"}`}>
+                    Balance: {balance} XRP
+                  </span>
+                </div>
+                {parsedAmount > parsedBalance && (
+                  <p className="mt-1 text-xs text-red-600 font-medium">Amount exceeds your balance.</p>
+                )}
               </div>
-                {loading ? `Creating escrows... ${progress.current}/${progress.total}` : "Fund My Top Choices"}
+
+              <button
+                onClick={handleFund}
+                disabled={loading || !canFund}
+                className={`w-full py-4 rounded-xl font-bold text-lg flex justify-center items-center gap-3 transition-all ${
+                  loading || !canFund ? "bg-gray-100 text-gray-400" : "bg-blue-600 text-white hover:bg-blue-700 shadow-md active:scale-[0.98]"
+                }`}
+              >
+                {loading ? <Loader2 className="animate-spin" size={20} /> : <CheckCircle2 size={20} />}
+                {loading ? `Creating escrows... ${progress.current}/${progress.total}` : parsedAmount > 0 ? `Fund ${parsedAmount} XRP` : "Enter amount to fund"}
               </button>
             </>
           )}
