@@ -20,6 +20,7 @@ export default function DonorPanel({
   markProjectFunded,
   updateMilestoneEscrow,
   refreshBalances,
+  addMintedNFT,
 }) {
   const [balance, setBalance] = useState("---");
   const [status, setStatus] = useState("");
@@ -113,11 +114,22 @@ export default function DonorPanel({
       // Mint Proof-of-Donation NFT
       setStatus("Minting Proof-of-Donation NFT...");
       try {
-        await mintDonationNFT({
+        const tokenId = await mintDonationNFT({
           wallet: wallets.fund,
           donor: wallets.donor.address,
           totalXRP,
           milestoneCount: count,
+        });
+        addMintedNFT?.({
+          NFTokenID: tokenId,
+          metadata: {
+            type: "proof-of-donation",
+            donor: wallets.donor.address,
+            totalXRP,
+            milestones: count,
+            timestamp: new Date().toISOString(),
+            fund: wallets.fund.address,
+          },
         });
       } catch (nftErr) {
         console.error("Donation NFT mint failed:", nftErr);

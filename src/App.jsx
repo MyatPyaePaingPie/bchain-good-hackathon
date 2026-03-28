@@ -7,12 +7,14 @@ import DonorPanel from "./components/DonorPanel.jsx";
 import SignerPanel from "./components/SignerPanel.jsx";
 import MilestoneBoard from "./components/MilestoneBoard.jsx";
 import FundDashboard from "./components/FundDashboard.jsx";
+import NFTGallery from "./components/NFTGallery.jsx";
 
 const TABS = [
   { id: "donor", label: "Donor" },
   { id: "committee", label: "Committee" },
   { id: "milestones", label: "Milestones" },
   { id: "dashboard", label: "Dashboard" },
+  { id: "gallery", label: "Gallery" },
 ];
 
 /** Enrich a raw milestone definition with runtime state fields */
@@ -189,6 +191,11 @@ export default function App() {
     refreshBalances();
   }, [refreshBalances]);
 
+  const [mintedNFTs, setMintedNFTs] = useState([]);
+  const addMintedNFT = useCallback((nft) => {
+    setMintedNFTs((prev) => [...prev, nft]);
+  }, []);
+
   const sharedProps = {
     projects,
     fundedProjects,
@@ -201,6 +208,7 @@ export default function App() {
     updateMilestoneApproval,
     updateMilestoneReleased,
     refreshBalances,
+    addMintedNFT,
   };
 
   return (
@@ -235,6 +243,7 @@ export default function App() {
         {activeTab === "committee" && <SignerPanel {...sharedProps} />}
         {activeTab === "milestones" && <MilestoneBoard {...sharedProps} />}
         {activeTab === "dashboard" && <FundDashboard {...sharedProps} />}
+        {activeTab === "gallery" && <NFTGallery mintedNFTs={mintedNFTs} />}
       </main>
     </div>
   );

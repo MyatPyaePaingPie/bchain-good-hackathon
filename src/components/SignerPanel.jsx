@@ -36,6 +36,7 @@ export default function SignerPanel({
   wallets,
   updateMilestoneApproval,
   updateMilestoneReleased,
+  addMintedNFT,
 }) {
   const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [releasingMilestoneId, setReleasingMilestoneId] = useState(null);
@@ -90,7 +91,7 @@ export default function SignerPanel({
           const approvedBy = COMMITTEE_MEMBERS
             .filter((m) => approvedMilestone.approvals[m.key])
             .map((m) => m.label);
-          await mintImpactNFT({
+          const tokenId = await mintImpactNFT({
             wallet: wallets.fund,
             milestone: { id: approvedMilestone.id, title: approvedMilestone.title },
             xrpAmount: approvedMilestone.xrpAmount,
@@ -98,6 +99,17 @@ export default function SignerPanel({
             escrowTxHash: approvedMilestone.escrowTxHash || "",
             releaseTxHash: releaseTxHash || "",
             approvedBy,
+          });
+          addMintedNFT?.({
+            NFTokenID: tokenId,
+            metadata: {
+              t: "poi",
+              mid: approvedMilestone.id,
+              xrp: approvedMilestone.xrpAmount,
+              to: wallets?.beneficiary?.address || "unknown",
+              esc: approvedMilestone.escrowTxHash || "",
+              rel: releaseTxHash || "",
+            },
           });
           setMessage(`${approvedMilestone.title} released + Impact NFT minted! Next milestone unlocked.`);
         } catch (nftErr) {
