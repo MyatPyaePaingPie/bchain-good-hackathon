@@ -99,10 +99,11 @@ import React, { useState, useEffect } from 'react';
 import { Wallet, Gift, ExternalLink, CheckCircle2, Loader2, Award } from 'lucide-react';
 import { sendPayment, getBalance } from '../xrpl/client';
 import { createEscrow } from '../xrpl/escrow';
-import { MILESTONES, TOTAL_FUNDING_GOAL } from '../data/milestones';
+import { generateCondition } from '../xrpl/condition';
+import { TOTAL_FUNDING_GOAL } from '../data/milestones';
 import { WALLETS } from '../data/wallets';
 
-export default function DonorPanel() {
+export default function DonorPanel({ milestones, wallets, updateMilestoneEscrow, refreshBalances }) {
   const [balance, setBalance] = useState("---");
   const [amount, setAmount] = useState(TOTAL_FUNDING_GOAL);
   const [status, setStatus] = useState("");
@@ -125,28 +126,47 @@ export default function DonorPanel() {
     setLoading(true);
     setProgress(0);
     try {
+      // Step 1: Send total XRP from donor to fund account
       setStatus("Step 1: Sending total payment to Fund Account...");
       await sendPayment({
-        wallet: WALLETS.donor,
-        destination: WALLETS.fund.address,
+        wallet: wallets.donor,
+        destination: wallets.fund.address,
         amount: amount.toString()
       });
 
-      for (let i = 0; i < MILESTONES.length; i++) {
-        const m = MILESTONES[i];
-        setStatus(`Step 2: Creating Escrow for ${m.title}... (${i + 1}/3)`);
-        await createEscrow({
-          fromWallet: WALLETS.fund,
-          destination: m.recipient,
+      // Step 2: Create one escrow per milestone with its own crypto-condition
+      for (let i = 0; i < milestones.length; i++) {
+        const m = milestones[i];
+        setStatus(`Step 2: Creating Escrow for ${m.title}... (${i + 1}/${milestones.length})`);
+
+        // Generate a unique condition/fulfillment pair for this milestone
+        const { condition, fulfillment } = await generateCondition();
+
+        const { result, sequence } = await createEscrow({
+          fromWallet: wallets.fund,
+          destination: wallets.beneficiary.address,
           amount: m.xrpAmount,
-          condition: m.conditionHex
+          condition,
         });
+
+        // Extract tx hash from result
+        const escrowTxHash = result?.result?.tx_json?.hash || null;
+
+        // Update app state so other panels can see this milestone is funded
+        updateMilestoneEscrow(m.id, {
+          escrowSequence: sequence,
+          condition,
+          fulfillment,
+          escrowTxHash,
+        });
+
         setProgress(i + 1);
       }
 
-      setStatus("🎉 3/3 Done! All milestones funded.");
+      refreshBalances();
+      setStatus("Done! All milestones funded and locked on-chain.");
     } catch (err) {
-      setStatus("❌ Error: " + err.message);
+      setStatus("Error: " + err.message);
     } finally {
       setLoading(false);
     }

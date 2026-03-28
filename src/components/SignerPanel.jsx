@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { finishEscrow } from "../xrpl/escrow";
 
 const COMMITTEE_MEMBERS = [
   {
@@ -146,23 +147,29 @@ export default function SignerPanel({
 
     let cancelled = false;
 
-    async function simulateRelease() {
+    async function releaseEscrow() {
       try {
         setError("");
-        setMessage(`Releasing ${selectedMilestone.title} from fund wallet ${wallets?.fund?.address ?? "unknown"}...`);
+        setMessage(`Releasing ${selectedMilestone.title} — submitting EscrowFinish to XRPL...`);
         setReleasingMilestoneId(selectedMilestone.id);
 
-        // Integration seam: replace this delay with finishEscrow(...) and impact NFT minting.
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        const result = await finishEscrow({
+          ownerAddress: wallets.fund.address,
+          escrowSequence: selectedMilestone.escrowSequence,
+          condition: selectedMilestone.condition,
+          fulfillment: selectedMilestone.fulfillment,
+          wallet: wallets.fund,
+        });
 
         if (cancelled) return;
 
-        updateMilestoneReleased(selectedMilestone.id, null);
-        setMessage(`${selectedMilestone.title} released. Replace stub delay with EscrowFinish during integration.`);
+        const releaseTxHash = result?.result?.tx_json?.hash || null;
+        updateMilestoneReleased(selectedMilestone.id, releaseTxHash);
+        setMessage(`${selectedMilestone.title} released on-chain! Funds sent to beneficiary.`);
       } catch (releaseError) {
         if (cancelled) return;
-        console.error("Failed to simulate milestone release:", releaseError);
-        setError("Could not simulate milestone release. Try selecting the milestone again.");
+        console.error("EscrowFinish failed:", releaseError);
+        setError("EscrowFinish failed: " + (releaseError.message || "Unknown error"));
       } finally {
         if (!cancelled) {
           setReleasingMilestoneId(null);
@@ -170,7 +177,7 @@ export default function SignerPanel({
       }
     }
 
-    simulateRelease();
+    releaseEscrow();
 
     return () => {
       cancelled = true;
