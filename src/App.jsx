@@ -50,18 +50,19 @@ export default function App() {
   const [activeTab, setActiveTab] = useState("donor");
   const [balances, setBalances] = useState({ donor: null, fund: null, beneficiary: null });
 
-  // Projects state: full catalog with selection + funded state
+  // Projects state: full catalog with ranking + funded state
   const [projects, setProjects] = useState(() =>
     PROJECTS.map((p) => ({
       ...p,
-      selected: false,
+      rank: null, // 1, 2, or 3 (donor preference order) — null = not selected
       funded: false,
       milestones: p.milestones.map((m, i) => initMilestoneState(m, i === 0)),
     }))
   );
 
-  // Derived: only funded projects (for committee/milestone/dashboard tabs)
+  // Derived
   const fundedProjects = projects.filter((p) => p.funded);
+  const rankedProjects = projects.filter((p) => p.rank !== null).sort((a, b) => a.rank - b.rank);
 
   // Balance polling
   const refreshBalances = useCallback(async () => {
@@ -88,22 +89,29 @@ export default function App() {
 
   // --- State updaters ---
 
-  /** Toggle project selection (donor browsing) */
-  const toggleProjectSelection = useCallback((projectId) => {
+  /** Toggle project ranking (donor preference 1st/2nd/3rd) */
+  const toggleProjectRank = useCallback((projectId) => {
     setProjects((prev) => {
       const project = prev.find((p) => p.id === projectId);
-      if (!project) return prev;
+      if (!project || project.funded) return prev;
 
-      // If already selected, deselect
-      if (project.selected) {
-        return prev.map((p) => (p.id === projectId ? { ...p, selected: false } : p));
+      // If already ranked, remove and re-pack ranks
+      if (project.rank !== null) {
+        const removedRank = project.rank;
+        return prev.map((p) => {
+          if (p.id === projectId) return { ...p, rank: null };
+          if (p.rank !== null && p.rank > removedRank) return { ...p, rank: p.rank - 1 };
+          return p;
+        });
       }
 
-      // Enforce max 3 selections
-      const selectedCount = prev.filter((p) => p.selected).length;
-      if (selectedCount >= 3) return prev;
+      // Enforce max 3 rankings
+      const rankedCount = prev.filter((p) => p.rank !== null).length;
+      if (rankedCount >= 3) return prev;
 
-      return prev.map((p) => (p.id === projectId ? { ...p, selected: true } : p));
+      return prev.map((p) =>
+        p.id === projectId ? { ...p, rank: rankedCount + 1 } : p
+      );
     });
   }, []);
 
@@ -183,9 +191,10 @@ export default function App() {
   const sharedProps = {
     projects,
     fundedProjects,
+    rankedProjects,
     wallets: WALLETS,
     balances,
-    toggleProjectSelection,
+    toggleProjectRank,
     markProjectFunded,
     updateMilestoneEscrow,
     updateMilestoneApproval,
