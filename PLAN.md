@@ -30,13 +30,16 @@ Fund Account --> EscrowCreate PER MILESTONE (each has its own crypto-condition)
      ├── Milestone 2: "Distribution & Logistics" — 75 XRP locked (own condition)
      └── Milestone 3: "Training Program"         — 50 XRP locked (own condition)
      |
-NFT receipt minted to donor (covers full donation)
+Proof-of-Donation NFT minted to donor (encodes: total XRP, milestone count, timestamp)
      |
 Committee votes PER MILESTONE (2-of-3 in app state)
      |
-     ├── Milestone 1 approved --> EscrowFinish #1 --> 100 XRP released + disbursement NFT
-     ├── Milestone 2 approved --> EscrowFinish #2 --> 75 XRP released + disbursement NFT
-     └── Milestone 3 approved --> EscrowFinish #3 --> 50 XRP released + disbursement NFT
+     ├── Milestone 1 approved --> EscrowFinish #1 --> 100 XRP released
+     │   └── Proof-of-Impact NFT minted (encodes: milestone title, XRP amount, escrow tx hash)
+     ├── Milestone 2 approved --> EscrowFinish #2 --> 75 XRP released
+     │   └── Proof-of-Impact NFT minted
+     └── Milestone 3 approved --> EscrowFinish #3 --> 50 XRP released
+         └── Proof-of-Impact NFT minted
 ```
 
 **What makes this interesting vs. a single escrow:**
@@ -51,6 +54,49 @@ Committee votes PER MILESTONE (2-of-3 in app state)
 - All escrows are created upfront when the donor donates. This locks the funds immediately and makes the pipeline visible on-chain from the start.
 
 **No backend.** Everything runs in the browser. Wallet seeds are testnet-only (no real money). State resets on refresh — that's fine for a 3-minute demo.
+
+---
+
+## Proof-of-Impact NFTs
+
+Not just receipt tokens — these NFTs encode verifiable data about what happened on-chain.
+
+### Two types of NFTs:
+
+**1. Proof-of-Donation** (minted to donor when they fund milestones)
+```json
+{
+  "type": "proof-of-donation",
+  "donor": "rwVpq...",
+  "totalXRP": 225,
+  "milestones": 3,
+  "timestamp": "2026-03-28T02:30:00Z",
+  "fund": "rP2GR..."
+}
+```
+
+**2. Proof-of-Impact** (minted to donor when each milestone is released)
+```json
+{
+  "type": "proof-of-impact",
+  "milestone": "Purchase Water Filters",
+  "milestoneId": 1,
+  "xrpAmount": 100,
+  "beneficiary": "raCGS...",
+  "escrowTxHash": "ABC123...",
+  "releaseTxHash": "DEF456...",
+  "approvedBy": ["NGO Rep", "Donor Rep"],
+  "timestamp": "2026-03-28T10:15:00Z"
+}
+```
+
+**How it works:**
+- The JSON is stringified, hex-encoded, and stored as the NFT URI (XRPL requires hex URIs)
+- Anyone can read the NFT on-chain, decode the URI, and verify every claim against the ledger
+- The `escrowTxHash` and `releaseTxHash` are links back to the actual transactions — full chain of custody
+- Donor ends up with 1 donation NFT + up to 3 impact NFTs = a complete on-chain portfolio of where their money went
+
+**Implementation:** This is Angelina's `nft.js`. The `mintNFT()` helper takes a metadata object, JSON-stringifies it, hex-encodes it, and passes it as the URI to NFTokenMint.
 
 ---
 
@@ -202,7 +248,9 @@ git push
 - Input: donor selects how much XRP to donate (default: 225 = sum of all milestones)
 - "Fund All Milestones" button -> calls `sendPayment()` to fund account, then creates one escrow per milestone via `createEscrow()` (3 escrows total)
 - Shows donor wallet balance (live)
-- Lists NFT receipts received (token IDs with testnet explorer links)
+- **NFT portfolio section:** shows Proof-of-Donation NFT + any Proof-of-Impact NFTs received
+  - Each NFT card shows decoded metadata (milestone name, amount, tx links)
+  - Explorer link for each NFT token ID
 - Shows donation status: "Funding milestones... 1/3... 2/3... 3/3 done!"
 
 ### SignerPanel.jsx (Andrew)
@@ -401,13 +449,14 @@ Everyone helps prep this Saturday. Nobody owns it alone.
 
 1. **"Here's the problem"** — show a real NGO scandal headline (misused funds, no accountability)
 2. **Switch to app** — show the dashboard, explain: 3 milestones, 225 XRP total, all pending
-3. **Donor funds all milestones** — click "Fund All Milestones", watch 3 escrows get created on-chain
+3. **Donor funds all milestones** — click "Fund All Milestones", watch 3 escrows get created. Proof-of-Donation NFT appears in donor's portfolio.
 4. **Show testnet explorer** — 3 separate EscrowCreate txs, each with its own condition hash. Funds locked.
 5. **Milestone 1 vote** — switch to Committee tab, select Milestone 1, NGO Rep + Donor Rep approve (2-of-3)
-6. **EscrowFinish #1 fires** — Milestone 1 status goes green, 100 XRP released, disbursement NFT minted
-7. **Show the pipeline** — Milestone 1 released, Milestones 2 & 3 still locked. Partial release visible on-chain.
-8. **"Anyone can audit this"** — open testnet explorer, show: which milestones are funded, which are released, the full chain of custody
-9. **Closing** — "Every milestone traceable, every disbursement voted on, every receipt on-chain"
+6. **EscrowFinish #1 fires** — Milestone 1 goes green, 100 XRP released
+7. **Proof-of-Impact NFT** — appears in donor's portfolio. Click it — shows milestone name, amount, escrow tx hash, release tx hash. Every claim verifiable on-chain.
+8. **Show the pipeline** — Milestone 1 released, Milestones 2 & 3 still locked. Partial release visible on-chain.
+9. **"This is the donor's impact portfolio"** — they collect one NFT per milestone. Not a jpeg — a cryptographic proof of where their money went.
+10. **Closing** — "Every milestone traceable, every disbursement voted on, every receipt on-chain"
 
 ---
 
